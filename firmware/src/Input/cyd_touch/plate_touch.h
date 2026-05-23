@@ -1,6 +1,5 @@
 /*
- * CYD XPT2046 plate-ADC touch + four-corner calibration (from cyd-lords-of-midnight touch.c).
- * Hardware read is bit-banged on dedicated GPIOs (SPI3 pins); mapping matches LoM.
+ * CYD XPT2046 touch — bit-bang on GPIO 25/32/39/33 + LoM corner span map.
  */
 #pragma once
 
@@ -26,10 +25,15 @@ typedef void (*plate_touch_idle_cb_t)(void);
 
 esp_err_t plate_touch_init(uint16_t screen_w, uint16_t screen_h);
 bool plate_touch_try_read(int *screen_x, int *screen_y);
+bool plate_touch_pen_down(void);
+void plate_touch_wait_finger_up(void);
 void plate_touch_interactive_calibration(plate_touch_cal_step_cb_t on_step);
 void plate_touch_get_cal(plate_touch_cal_t *out);
 void plate_touch_set_cal(const plate_touch_cal_t *cal);
 void plate_touch_set_idle_callback(plate_touch_idle_cb_t cb);
+
+/** Throttled printf diagnostics when CYD_TOUCH_DEBUG is set. */
+void plate_touch_debug_poll(const char *context);
 
 #ifdef __cplusplus
 }

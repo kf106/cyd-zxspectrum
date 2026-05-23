@@ -73,6 +73,9 @@ SDCard::SDCard(const char *mountPoint, gpio_num_t clk, gpio_num_t cmd, gpio_num_
 SDCard::SDCard(const char *mountPoint, gpio_num_t cs) {
   m_mountPoint = mountPoint;
   m_host.max_freq_khz = SDMMC_FREQ_52M;
+#ifdef SD_CARD_SPI_HOST
+  m_host.slot = SD_CARD_SPI_HOST;
+#endif
   esp_err_t ret;
   // Options for mounting the filesystem.
   // If format_if_mount_failed is set to true, SD card will be partitioned and

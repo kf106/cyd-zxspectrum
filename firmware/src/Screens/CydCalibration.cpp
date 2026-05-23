@@ -9,22 +9,15 @@
 
 static const int CYD_SCREEN_W = 320;
 static const int CYD_SCREEN_H = 240;
-static const int CYD_DOT_RADIUS = 4;
+static const int CYD_DOT_RADIUS = 8;
 
 static Display *s_calTft = nullptr;
+static int s_calStep = 0;
+static const char *s_calColourName = "";
 
 static void drawFilledDot(Display &tft, int16_t cx, int16_t cy, uint16_t color)
 {
   tft.fillRect(cx - CYD_DOT_RADIUS, cy - CYD_DOT_RADIUS, CYD_DOT_RADIUS * 2 + 1, CYD_DOT_RADIUS * 2 + 1, color);
-}
-
-static void drawCornerDots(Display &tft)
-{
-  const int r = CYD_DOT_RADIUS;
-  drawFilledDot(tft, CYD_SCREEN_W - 1 - r, r, Display::color565(255, 0, 0));
-  drawFilledDot(tft, r, r, Display::color565(0, 255, 0));
-  drawFilledDot(tft, CYD_SCREEN_W - 1 - r, CYD_SCREEN_H - 1 - r, Display::color565(255, 0, 255));
-  drawFilledDot(tft, r, CYD_SCREEN_H - 1 - r, Display::color565(0, 255, 255));
 }
 
 static uint16_t colorForCorner(const char *name)
@@ -44,30 +37,72 @@ static uint16_t colorForCorner(const char *name)
   return Display::color565(0, 255, 255);
 }
 
-static void calStepUi(int step_index, const char *colour_name, uint16_t colour_rgb565)
+static void cornerCenter(int step_index, int16_t &cx, int16_t &cy)
 {
-  (void)step_index;
-  (void)colour_rgb565;
+  const int r = CYD_DOT_RADIUS;
+  switch (step_index)
+  {
+  case 0:
+    cx = CYD_SCREEN_W - 1 - r;
+    cy = r;
+    break;
+  case 1:
+    cx = r;
+    cy = r;
+    break;
+  case 2:
+    cx = CYD_SCREEN_W - 1 - r;
+    cy = CYD_SCREEN_H - 1 - r;
+    break;
+  default:
+    cx = r;
+    cy = CYD_SCREEN_H - 1 - r;
+    break;
+  }
+}
+
+static void paintCalScreen(void)
+{
   if (s_calTft == nullptr)
   {
     return;
   }
   Display &tft = *s_calTft;
+  int16_t dotX = 0;
+  int16_t dotY = 0;
+  cornerCenter(s_calStep, dotX, dotY);
+
   tft.startWrite();
   tft.fillScreen(TFT_BLACK);
-  drawCornerDots(tft);
+
+  drawFilledDot(tft, dotX, dotY, colorForCorner(s_calColourName));
+
   tft.loadFont(GillSans_25_vlw);
   tft.setTextColor(TFT_WHITE, TFT_BLACK);
   Point titleSize = tft.measureString("CALIBRATING");
-  tft.drawString("CALIBRATING", (CYD_SCREEN_W - titleSize.x) / 2, 72);
+  tft.drawString("CALIBRATING", (CYD_SCREEN_W - titleSize.x) / 2, 56);
 
   char prompt[48];
-  snprintf(prompt, sizeof(prompt), "Touch the %s dot", colour_name);
+  snprintf(prompt, sizeof(prompt), "Touch the %s dot", s_calColourName);
   tft.loadFont(GillSans_15_vlw);
   Point promptSize = tft.measureString(prompt);
-  tft.setTextColor(colorForCorner(colour_name), TFT_BLACK);
-  tft.drawString(prompt, (CYD_SCREEN_W - promptSize.x) / 2, 108);
+  tft.setTextColor(colorForCorner(s_calColourName), TFT_BLACK);
+  tft.drawString(prompt, (CYD_SCREEN_W - promptSize.x) / 2, 88);
+
   tft.endWrite();
+}
+
+static void calStepUi(int step_index, const char *colour_name, uint16_t colour_rgb565)
+{
+  (void)colour_rgb565;
+  s_calStep = step_index;
+  s_calColourName = colour_name;
+  paintCalScreen();
+}
+
+static void calIdlePump(void)
+{
+  plate_touch_debug_poll("cal");
 }
 
 struct HandednessButton
@@ -97,6 +132,8 @@ static bool runHandednessSelection(Display &tft, ISettings &settings)
       {"Right", true, 168, 118, 128, 72},
   };
 
+  plate_touch_wait_finger_up();
+
   tft.startWrite();
   tft.fillScreen(TFT_BLACK);
   tft.loadFont(GillSans_25_vlw);
@@ -104,7 +141,7 @@ static bool runHandednessSelection(Display &tft, ISettings &settings)
   Point titleSize = tft.measureString("Handedness");
   tft.drawString("Handedness", (CYD_SCREEN_W - titleSize.x) / 2, 48);
   tft.loadFont(GillSans_15_vlw);
-  const char *hint = "Touch Left or Right";
+  const char *hint = "Tap Left or Right";
   Point hintSize = tft.measureString(hint);
   tft.drawString(hint, (CYD_SCREEN_W - hintSize.x) / 2, 82);
   drawButton(tft, buttons[0], false);
@@ -113,46 +150,32 @@ static bool runHandednessSelection(Display &tft, ISettings &settings)
 
   bool selected = false;
   bool rightHanded = false;
-  int active = -1;
 
   while (!selected)
   {
+    plate_touch_debug_poll("handedness");
     int16_t x = 0;
     int16_t y = 0;
     if (CydTouch::readScreen(x, y))
     {
-      int hit = -1;
       for (int i = 0; i < 2; i++)
       {
         const HandednessButton &b = buttons[i];
         if (x >= b.x && x < b.x + b.w && y >= b.y && y < b.y + b.h)
         {
-          hit = i;
+          rightHanded = b.rightHanded;
+          selected = true;
+          tft.startWrite();
+          drawButton(tft, buttons[i], true);
+          tft.endWrite();
           break;
         }
       }
-      if (hit != active)
-      {
-        tft.startWrite();
-        if (active >= 0)
-        {
-          drawButton(tft, buttons[active], false);
-        }
-        active = hit;
-        if (active >= 0)
-        {
-          drawButton(tft, buttons[active], true);
-        }
-        tft.endWrite();
-      }
-    }
-    else if (active >= 0)
-    {
-      rightHanded = buttons[active].rightHanded;
-      selected = true;
     }
     vTaskDelay(20 / portTICK_PERIOD_MS);
   }
+
+  plate_touch_wait_finger_up();
 
   settings.setCydRightHanded(rightHanded);
   tft.startWrite();
@@ -178,7 +201,9 @@ bool CydCalibration::runIfNeeded(Display &tft, ISettings &settings)
   }
 
   s_calTft = &tft;
+  plate_touch_set_idle_callback(calIdlePump);
   plate_touch_interactive_calibration(calStepUi);
+  plate_touch_set_idle_callback(nullptr);
   s_calTft = nullptr;
 
   settings.setCydTouchCalibration(CydTouch::calibration());

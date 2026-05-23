@@ -41,7 +41,7 @@ void displayTask(void *pvParameters) {
   }
 }
 
-void Renderer::drawBorder(int startPos, int endPos, int offset, int length, int drawWidth, int drawHeight, bool isSideBorders)
+void Renderer::drawBorder(int startPos, int endPos, int offset, int sideBorderLen, int areaX, int areaW, bool isSideBorders)
 {
   for (int borderPos = startPos; borderPos < endPos;)
   {
@@ -64,19 +64,19 @@ void Renderer::drawBorder(int startPos, int endPos, int offset, int length, int 
       if (isSideBorders)
       {
 #ifdef CYD_TOUCH_KEYBOARD
-        CydTouchKeyboard::fillRectAvoidingKeys(m_tft, 0, rangeStart, length, rangeLength, tftColor);
-        CydTouchKeyboard::fillRectAvoidingKeys(m_tft, drawWidth - length, rangeStart, length, rangeLength, tftColor);
+        CydTouchKeyboard::fillRectAvoidingKeys(m_tft, areaX, rangeStart, sideBorderLen, rangeLength, tftColor);
+        CydTouchKeyboard::fillRectAvoidingKeys(m_tft, areaX + areaW - sideBorderLen, rangeStart, sideBorderLen, rangeLength, tftColor);
 #else
-        m_tft.fillRect(0, rangeStart, length, rangeLength, tftColor);
-        m_tft.fillRect(drawWidth - length, rangeStart, length, rangeLength, tftColor);
+        m_tft.fillRect(areaX, rangeStart, sideBorderLen, rangeLength, tftColor);
+        m_tft.fillRect(areaX + areaW - sideBorderLen, rangeStart, sideBorderLen, rangeLength, tftColor);
 #endif
       }
       else
       {
 #ifdef CYD_TOUCH_KEYBOARD
-        CydTouchKeyboard::fillRectAvoidingKeys(m_tft, 0, rangeStart, drawWidth, rangeLength, tftColor);
+        CydTouchKeyboard::fillRectAvoidingKeys(m_tft, areaX, rangeStart, areaW, rangeLength, tftColor);
 #else
-        m_tft.fillRect(0, rangeStart, drawWidth, rangeLength, tftColor);
+        m_tft.fillRect(areaX, rangeStart, areaW, rangeLength, tftColor);
 #endif
       }
     }
@@ -114,17 +114,58 @@ void Renderer::drawScreen()
 #endif
 }
 
+#if defined(CYD_EMULATOR_W) && defined(CYD_TOUCH_KEYBOARD)
+static uint16_t cydBorder565(const uint8_t *borderColors, int index)
+{
+  uint16_t tftColor = specpal565[borderColors[index] & 7];
+  return (tftColor >> 8) | (tftColor << 8);
+}
+
+void Renderer::drawCydBorders()
+{
+  const int commandRowY = spectrumOriginY + CYD_SPECTRUM_H;
+
+  for (int y = 0; y < CYD_SPECTRUM_BORDER_TOP; y++)
+  {
+    int idx = (y * 48) / CYD_SPECTRUM_BORDER_TOP;
+    uint16_t color = cydBorder565(currentBorderColors, idx);
+    CydTouchKeyboard::fillRectAvoidingKeys(m_tft, emulatorOriginX, emulatorOriginY + y, emulatorWidth, 1, color);
+  }
+
+  for (int row = 0; row < CYD_SPECTRUM_H; row++)
+  {
+    int screenY = spectrumOriginY + row;
+    uint16_t color = cydBorder565(currentBorderColors, 64 + row);
+    CydTouchKeyboard::fillRectAvoidingKeys(m_tft, emulatorOriginX, screenY, sideBorderLen, 1, color);
+    CydTouchKeyboard::fillRectAvoidingKeys(m_tft, emulatorOriginX + emulatorWidth - sideBorderLen, screenY, sideBorderLen, 1, color);
+  }
+
+  for (int y = 0; y < CYD_SPECTRUM_BORDER_BOTTOM; y++)
+  {
+    int screenY = commandRowY + y;
+    int idx = 256 + (y * 48) / CYD_SPECTRUM_BORDER_BOTTOM;
+    uint16_t color = cydBorder565(currentBorderColors, idx);
+    CydTouchKeyboard::fillRectAvoidingKeys(m_tft, emulatorOriginX, screenY, emulatorWidth, 1, color);
+  }
+}
+#endif
+
 void Renderer::drawSpectrumScreen() {
+#if defined(CYD_EMULATOR_W) && defined(CYD_TOUCH_KEYBOARD)
   if (isLoading)
   {
     int position = loadProgress * 256 / 100;
-#ifdef CYD_SPECTRUM_TOP
-    m_tft.fillRect(spectrumOriginX + position, spectrumOriginY, 256 - position, 8, TFT_BLACK);
-    m_tft.fillRect(spectrumOriginX, spectrumOriginY, position, 8, TFT_GREEN);
+    const int commandRowY = spectrumOriginY + CYD_SPECTRUM_H;
+    m_tft.fillRect(spectrumOriginX + position, commandRowY, 256 - position, CYD_COMMAND_ROW_H, TFT_BLACK);
+    m_tft.fillRect(spectrumOriginX, commandRowY, position, CYD_COMMAND_ROW_H, TFT_GREEN);
+  }
+  drawCydBorders();
 #else
+  if (isLoading)
+  {
+    int position = loadProgress * 256 / 100;
     m_tft.fillRect(position, 0, screenWidth - position, 8, TFT_BLACK);
     m_tft.fillRect(0, 0, position, 8, TFT_GREEN);
-#endif
   }
 
   const int borderOffset = 36;
@@ -134,22 +175,17 @@ void Renderer::drawSpectrumScreen() {
     borderHeightSkip = MENU_BAR_HEIGHT;
   }
 #endif
-#ifdef CYD_SPECTRUM_TOP
-  drawBorder(borderHeightSkip, spectrumOriginY, borderOffset, screenWidth, screenWidth, 0, false);
-  drawBorder(spectrumOriginY + 192, screenHeight, borderOffset, screenWidth, screenWidth, 0, false);
-  drawBorder(spectrumOriginY, spectrumOriginY + 192, borderOffset, spectrumOriginX, screenWidth, 0, true);
-#else
-  drawBorder(borderHeightSkip, borderHeight, borderOffset, screenWidth, screenWidth, borderHeight, false);
+  drawBorder(borderHeightSkip, borderHeight, borderOffset, borderWidth, 0, screenWidth, false);
   int bottomBorderSkip = 0;
 #ifndef CYD_NO_EMULATOR_MENU
   if (!isShowingMenu) {
-    drawBorder(screenHeight - borderHeight, screenHeight, borderOffset, screenWidth, screenWidth, borderHeight, false);
+    drawBorder(screenHeight - borderHeight, screenHeight, borderOffset, borderWidth, 0, screenWidth, false);
   }
   bottomBorderSkip = isShowingMenu ? VOLUME_BAR_HEIGHT : 0;
 #else
-  drawBorder(screenHeight - borderHeight, screenHeight, borderOffset, screenWidth, screenWidth, borderHeight, false);
+  drawBorder(screenHeight - borderHeight, screenHeight, borderOffset, borderWidth, 0, screenWidth, false);
 #endif
-  drawBorder(borderHeightSkip, screenHeight - borderHeight - bottomBorderSkip, borderOffset, borderWidth, screenWidth, borderHeight, true);
+  drawBorder(borderHeightSkip, screenHeight - borderHeight - bottomBorderSkip, borderOffset, borderWidth, 0, screenWidth, true);
 #endif
   // do the pixels
   uint8_t *attrBase = currentScreenBuffer + 0x1800;

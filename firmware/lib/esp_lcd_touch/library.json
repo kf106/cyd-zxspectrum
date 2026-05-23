@@ -1,0 +1,10 @@
+{
+  "name": "esp_lcd_touch",
+  "version": "1.0.0",
+  "description": "Espressif LCD touch abstraction (from esp-bsp)",
+  "frameworks": "espidf, arduino",
+  "platforms": "espressif32",
+  "build": {
+    "srcFilter": "+<esp_lcd_touch.c>"
+  }
+}

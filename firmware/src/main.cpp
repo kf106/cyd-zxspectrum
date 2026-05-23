@@ -73,8 +73,11 @@ void setup(void)
   digitalWrite(BOARD_POWERON, HIGH);
   #endif
   Serial.begin(115200);
+  Serial.println();
+  Serial.println("=== cyd-zxspectrum boot ===");
+  Serial.flush();
 #ifdef BOOT_DEBUG
-  delay(1500); // allow USB-serial to connect after reset
+  delay(500); // brief pause so USB-serial can attach after reset
 #endif
   bootLogResetReason();
   bootLog("main", "Serial started");
@@ -89,24 +92,24 @@ void setup(void)
 #endif
   #ifdef TFT_MOSI
   bootLog("main", "init SPI bus for TFT");
-  // Initialize SPI
-  spi_bus_config_t buscfg = {
-      .mosi_io_num = TFT_MOSI,
-      .miso_io_num = TFT_MISO,
-      .sclk_io_num = TFT_SCLK,
-      .quadwp_io_num = -1,
-      .quadhd_io_num = -1,
-      .data4_io_num = -1,
-      .data5_io_num = -1,
-      .data6_io_num = -1,
-      .data7_io_num = -1,
-      .max_transfer_sz = 65535,
-      .flags = SPICOMMON_BUSFLAG_MASTER,
-      //.isr_cpu_id = ESP_INTR_CPU_AFFINITY_1,
-      .intr_flags = 0,
-  };
-  ESP_ERROR_CHECK(spi_bus_initialize(SPI2_HOST, &buscfg, SPI_DMA_CH_AUTO));
-  bootLog("main", "SPI bus ready");
+  spi_bus_config_t buscfg = {};
+  buscfg.mosi_io_num = TFT_MOSI;
+  buscfg.miso_io_num = TFT_MISO;
+  buscfg.sclk_io_num = TFT_SCLK;
+  buscfg.quadwp_io_num = -1;
+  buscfg.quadhd_io_num = -1;
+  buscfg.max_transfer_sz = 65535;
+  buscfg.flags = SPICOMMON_BUSFLAG_MASTER;
+  buscfg.intr_flags = 0;
+  esp_err_t spi2_err = spi_bus_initialize(SPI2_HOST, &buscfg, SPI_DMA_CH_AUTO);
+  if (spi2_err != ESP_OK)
+  {
+    bootLogf("main", "SPI2 init FAILED: %s", esp_err_to_name(spi2_err));
+  }
+  else
+  {
+    bootLog("main", "SPI bus ready");
+  }
   #endif
   // Files
   SDCard *sdFileSystem = nullptr;
@@ -221,15 +224,18 @@ void setup(void)
   EmulatorScreen *emulatorScreen = new EmulatorScreen(*tft, hdmiDisplay, audioOutput, files);
   bootLog("main", "push EmulatorScreen on nav stack");
   navigationStack->push(emulatorScreen);
-  bootLog("main", "EmulatorScreen::run (48K)");
-  emulatorScreen->run("", models_enum::SPECMDL_48K);
 #ifdef CYD_TOUCH_KEYBOARD
+  const bool cydRightHanded = settings->isCydRightHanded();
+  emulatorScreen->setCydHandedness(cydRightHanded);
+  bootLog("main", "start CYD touch keyboard");
   CydTouchKeyboard *cydTouchKeyboard = new CydTouchKeyboard(
       [&](SpecKeys key, bool down) { navigationStack->updateKey(key, down); },
-      settings->isCydRightHanded());
-  emulatorScreen->setCydTouchKeyboard(cydTouchKeyboard);
+      cydRightHanded);
+  emulatorScreen->setCydTouchKeyboard(cydTouchKeyboard, cydRightHanded);
   cydTouchKeyboard->start();
 #endif
+  bootLog("main", "EmulatorScreen::run (48K)");
+  emulatorScreen->run("", models_enum::SPECMDL_48K);
   bootLog("main", "EmulatorScreen::run returned — entering main loop");
   // start off the keyboard and feed keys into the active scene
   // SerialKeyboard *keyboard = new SerialKeyboard([&](SpecKeys key, bool down)

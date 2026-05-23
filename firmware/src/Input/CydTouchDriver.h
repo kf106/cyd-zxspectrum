@@ -4,7 +4,7 @@
 
 class Display;
 
-/** Persisted plate limits (maps to cyd-lords-of-midnight plate_touch_cal_t). */
+/** Persisted plate span limits (LoM plate_touch_cal_t). */
 struct CydTouchCalibration
 {
   uint16_t rawXMin = 200;
@@ -18,6 +18,7 @@ struct CydTouchCalibration
 namespace CydTouch
 {
 void init();
+bool isReady();
 void setCalibration(const CydTouchCalibration &cal);
 const CydTouchCalibration &calibration();
 bool readScreen(int16_t &x, int16_t &y);

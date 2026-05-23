@@ -4,6 +4,7 @@
 #include "../../TFT/Display.h"
 #include "../../Serial.h"
 #include "../../BootLog.h"
+#include "../../CydLayout.h"
 
 void displayTask(void *pvParameters);
 
@@ -35,15 +36,23 @@ private:
     uint16_t flashTimer = 0;
     const int screenWidth = TFT_WIDTH;
     const int screenHeight = TFT_HEIGHT;
+#if defined(CYD_EMULATOR_W) && defined(CYD_TOUCH_KEYBOARD)
+    const int emulatorOriginY = CYD_EMULATOR_Y;
+    const int emulatorWidth = CYD_EMULATOR_W;
+    const int emulatorHeight = CYD_EMULATOR_H;
+    const int spectrumOriginY = cydSpectrumOriginY();
+    int emulatorOriginX = CYD_EMULATOR_X_RIGHT;
+    int spectrumOriginX = CYD_EMULATOR_X_RIGHT + cydSpectrumSideBorder(true);
+    int sideBorderLen = cydSpectrumSideBorder(true);
+    void drawCydBorders();
+#endif
+#if !defined(CYD_EMULATOR_W) || !defined(CYD_TOUCH_KEYBOARD)
     const int borderWidth = (screenWidth - 256) / 2;
     const int borderHeight = (screenHeight - 192) / 2;
     const int spectrumOriginX = borderWidth;
-#ifdef CYD_SPECTRUM_TOP
-    const int spectrumOriginY = CYD_SPECTRUM_TOP;
-#else
     const int spectrumOriginY = borderHeight;
 #endif
-    void drawBorder(int startPos, int endPos, int offset, int length, int drawWidth, int drawHeight, bool isSideBorders);
+    void drawBorder(int startPos, int endPos, int offset, int sideBorderLen, int areaX, int areaW, bool isSideBorders);
     // draw the screen
     void drawScreen();
     // draw the spectrum screen
@@ -135,6 +144,14 @@ public:
       firstDraw = true;
     }
 #ifdef CYD_TOUCH_KEYBOARD
+    void setCydHandedness(bool rightHanded) {
+#if defined(CYD_EMULATOR_W)
+      emulatorOriginX = cydEmulatorOriginX(rightHanded);
+      sideBorderLen = cydSpectrumSideBorder(rightHanded);
+      spectrumOriginX = cydSpectrumOriginX(rightHanded);
+      setNeedsRedraw();
+#endif
+    }
     void setCydTouchKeyboard(CydTouchKeyboard *keyboard) {
       m_cydTouchKeyboard = keyboard;
     }

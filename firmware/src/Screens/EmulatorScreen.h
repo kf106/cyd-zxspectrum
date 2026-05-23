@@ -39,6 +39,7 @@ class EmulatorScreen : public Screen
     void loadTape(std::string filename);
     Renderer *getRenderer() { return renderer; }
 #ifdef CYD_TOUCH_KEYBOARD
-    void setCydTouchKeyboard(CydTouchKeyboard *keyboard);
+    void setCydHandedness(bool rightHanded);
+    void setCydTouchKeyboard(CydTouchKeyboard *keyboard, bool rightHanded);
 #endif
 };

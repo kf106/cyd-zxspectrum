@@ -1,11 +1,15 @@
 #include "CydTouchDriver.h"
 #include "cyd_touch/plate_touch.h"
+#include "../BootLog.h"
+#include "esp_log.h"
 
+static const char *TAG = "CydTouch";
 static const uint16_t CYD_SCREEN_W = 320;
 static const uint16_t CYD_SCREEN_H = 240;
 
 static CydTouchCalibration s_cal;
 static bool s_inited = false;
+static bool s_touch_ready = false;
 
 static plate_touch_cal_t toPlateCal(const CydTouchCalibration &cal)
 {
@@ -32,12 +36,27 @@ static CydTouchCalibration fromPlateCal(const plate_touch_cal_t &plate)
 
 void CydTouch::init()
 {
-  if (s_inited)
+  if (s_touch_ready)
   {
     return;
   }
-  plate_touch_init(CYD_SCREEN_W, CYD_SCREEN_H);
+  const esp_err_t err = plate_touch_init(CYD_SCREEN_W, CYD_SCREEN_H);
   s_inited = true;
+  if (err != ESP_OK)
+  {
+    ESP_LOGE(TAG, "plate_touch_init failed: %s", esp_err_to_name(err));
+    bootLogf("touch", "init FAILED: %s", esp_err_to_name(err));
+    s_touch_ready = false;
+    return;
+  }
+  s_touch_ready = true;
+  ESP_LOGI(TAG, "touch ready");
+  bootLog("touch", "init OK (bit-bang XPT2046)");
+}
+
+bool CydTouch::isReady()
+{
+  return s_touch_ready;
 }
 
 void CydTouch::setCalibration(const CydTouchCalibration &cal)
@@ -60,6 +79,10 @@ bool CydTouch::readScreen(int16_t &x, int16_t &y)
   if (!s_inited)
   {
     init();
+  }
+  if (!s_touch_ready)
+  {
+    return false;
   }
   int sx = 0;
   int sy = 0;

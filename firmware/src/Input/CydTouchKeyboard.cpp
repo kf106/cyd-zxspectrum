@@ -1,12 +1,10 @@
 #include "CydTouchKeyboard.h"
 #include "CydTouchDriver.h"
+#include "../CydLayout.h"
 #include "../TFT/Display.h"
 #include "../BootLog.h"
+#include "cyd_touch/plate_touch.h"
 #include "../Screens/fonts/GillSans_15_vlw.h"
-
-#ifndef CYD_SPECTRUM_TOP
-#define CYD_SPECTRUM_TOP 8
-#endif
 
 static const int CYD_SCREEN_W = 320;
 static bool s_rightHanded = false;
@@ -15,10 +13,9 @@ static const int CYD_KEY_W = 32;
 static const int CYD_KEY_H = 26;
 static const int CYD_MODIFIER_KEY_W = 32;
 static const int CYD_MODIFIER_KEY_H = 32;
-static const int CYD_SPECTRUM_X = (320 - 256) / 2;
-static const int CYD_SPECTRUM_Y = CYD_SPECTRUM_TOP;
 static const int CYD_BOTTOM_ROW_Y = 240 - CYD_KEY_H;
-static const int CYD_LEFT_KEY_X = 0;
+static const int CYD_MODIFIER_COLUMN_X_LEFT = 0;
+static const int CYD_MODIFIER_COLUMN_X_RIGHT = CYD_SCREEN_W - CYD_MODIFIER_KEY_W;
 static const int CYD_LEFT_MOD_H = CYD_KEY_H;
 // Left column (bottom to top): Sym, Caps (26px), then R4–R1 (32px).
 static const int CYD_SYM_Y = CYD_BOTTOM_ROW_Y - CYD_LEFT_MOD_H;
@@ -84,27 +81,20 @@ static const CydKeyRowDef kKeyRows[CydTouchKeyboard::ROW_COUNT] = {
       {"Spc", SPECKEY_SPACE}}},
 };
 
-static int16_t mirrorKeyX(int16_t x, int16_t w)
+static int16_t modifierColumnX(bool rightHanded)
 {
-  if (!s_rightHanded)
-  {
-    return x;
-  }
-  return (int16_t)(CYD_SCREEN_W - x - w);
+  return rightHanded ? (int16_t)CYD_MODIFIER_COLUMN_X_RIGHT : (int16_t)CYD_MODIFIER_COLUMN_X_LEFT;
 }
 
-static void initKeyLayout()
+static void layoutKeys(bool rightHanded)
 {
-  static bool initialized = false;
-  if (initialized)
-  {
-    return;
-  }
-  initialized = true;
+  s_rightHanded = rightHanded;
+  const int16_t modX = modifierColumnX(rightHanded);
+
   for (int i = 0; i < CydTouchKeyboard::BOTTOM_KEY_COUNT; i++)
   {
     s_keys[CYD_BOTTOM_KEY_INDEX + i] = {
-        mirrorKeyX((int16_t)(i * CYD_KEY_W), (int16_t)CYD_KEY_W),
+        (int16_t)(i * CYD_KEY_W),
         (int16_t)CYD_BOTTOM_ROW_Y,
         (int16_t)CYD_KEY_W,
         (int16_t)CYD_KEY_H,
@@ -112,26 +102,25 @@ static void initKeyLayout()
         ""};
   }
   s_keys[CYD_SYM_KEY_INDEX] = {
-      mirrorKeyX((int16_t)CYD_LEFT_KEY_X, (int16_t)CYD_MODIFIER_KEY_W),
+      modX,
       (int16_t)CYD_SYM_Y,
       (int16_t)CYD_MODIFIER_KEY_W,
       (int16_t)CYD_LEFT_MOD_H,
       SPECKEY_SYMB,
       "Sym"};
   s_keys[CYD_CAPS_KEY_INDEX] = {
-      mirrorKeyX((int16_t)CYD_LEFT_KEY_X, (int16_t)CYD_MODIFIER_KEY_W),
+      modX,
       (int16_t)CYD_CAPS_Y,
       (int16_t)CYD_MODIFIER_KEY_W,
       (int16_t)CYD_LEFT_MOD_H,
       SPECKEY_SHIFT,
       "Caps"};
   const char *rowLabels[CydTouchKeyboard::ROW_COUNT] = {"R1", "R2", "R3", "R4"};
-  // Above Caps: R4 (nearest Caps) through R1 (top).
   for (int slot = 0; slot < CydTouchKeyboard::ROW_COUNT; slot++)
   {
     int8_t rowIndex = (int8_t)(CydTouchKeyboard::ROW_COUNT - 1 - slot);
     s_keys[CYD_ROW_SELECT_INDEX + slot] = {
-        mirrorKeyX((int16_t)CYD_LEFT_KEY_X, (int16_t)CYD_MODIFIER_KEY_W),
+        modX,
         cydRowSelectY(slot),
         (int16_t)CYD_MODIFIER_KEY_W,
         (int16_t)CYD_MODIFIER_KEY_H,
@@ -143,8 +132,7 @@ static void initKeyLayout()
 
 CydTouchKeyboard::CydTouchKeyboard(KeyEventType keyEvent, bool rightHanded) : m_keyEvent(keyEvent)
 {
-  s_rightHanded = rightHanded;
-  initKeyLayout();
+  layoutKeys(rightHanded);
   m_keys = s_keys;
   m_keyCount = CYD_KEY_COUNT;
   selectRow(0);
@@ -153,7 +141,14 @@ CydTouchKeyboard::CydTouchKeyboard(KeyEventType keyEvent, bool rightHanded) : m_
 void CydTouchKeyboard::start()
 {
   CydTouch::init();
-  bootLog("touch", "CYD plate touch (LoM cal) init");
+  if (!CydTouch::isReady())
+  {
+    bootLog("touch", "keyboard started but touch driver NOT ready");
+  }
+  else
+  {
+    bootLog("touch", "keyboard task starting");
+  }
   xTaskCreatePinnedToCore(keyboardTask, "cydTouchKb", 4096, this, 1, nullptr, 0);
 }
 
@@ -329,7 +324,7 @@ void CydTouchKeyboard::releaseActiveKey()
 
 void CydTouchKeyboard::fillRectAvoidingKeys(Display &tft, int16_t x, int16_t y, int16_t w, int16_t h, uint16_t color)
 {
-  initKeyLayout();
+  layoutKeys(s_rightHanded);
   for (int16_t row = y; row < y + h; row++)
   {
     int16_t spanStart = x;
@@ -436,10 +431,6 @@ void CydTouchKeyboard::drawOverlayIfNeeded(Display &tft)
     redrawRowSelectKeys(tft);
     m_rowSelectVisualDirty = false;
   }
-  else
-  {
-    redrawRowSelectKeys(tft);
-  }
   if (m_modifierVisualDirty)
   {
     size_t capIdx = indexForKey(SPECKEY_SHIFT);
@@ -501,18 +492,21 @@ void CydTouchKeyboard::pressKeyAt(int index)
 
 bool CydTouchKeyboard::isInPlayfield(int16_t x, int16_t y) const
 {
+  const int16_t modX = modifierColumnX(s_rightHanded);
   if (s_rightHanded)
   {
-    if (x >= CYD_SCREEN_W - CYD_LEFT_STRIP_PLAYFIELD_X)
+    if (x >= modX - CYD_ROW_HIT_PAD_X)
     {
       return false;
     }
   }
-  else if (x < CYD_LEFT_STRIP_PLAYFIELD_X)
+  else if (x < modX + CYD_MODIFIER_KEY_W + (CYD_LEFT_STRIP_PLAYFIELD_X - CYD_MODIFIER_KEY_W))
   {
     return false;
   }
-  return x >= CYD_SPECTRUM_X && x < CYD_SPECTRUM_X + 256 && y >= CYD_SPECTRUM_Y && y < CYD_SPECTRUM_Y + 192;
+  const int specX = cydSpectrumOriginX(s_rightHanded);
+  const int specY = cydSpectrumOriginY();
+  return x >= specX && x < specX + CYD_SPECTRUM_W && y >= specY && y < specY + CYD_SPECTRUM_H;
 }
 
 bool CydTouchKeyboard::hitKeyRect(const CydKeyDef &k, int16_t x, int16_t y) const
@@ -582,6 +576,9 @@ bool CydTouchKeyboard::readTouch(int16_t &x, int16_t &y)
 
 void CydTouchKeyboard::pollTouch()
 {
+#if CYD_TOUCH_DEBUG
+  plate_touch_debug_poll("kb");
+#endif
   int16_t x = 0;
   int16_t y = 0;
   if (!readTouch(x, y))
@@ -632,9 +629,17 @@ void CydTouchKeyboard::keyboardTask(void *arg)
 {
   CydTouchKeyboard *kb = (CydTouchKeyboard *)arg;
   bootLog("touch", "CYD touch keyboard task running");
+  uint32_t lastHeartbeat = 0;
   while (true)
   {
     kb->pollTouch();
+    const uint32_t now = millis();
+    if (now - lastHeartbeat >= 5000)
+    {
+      Serial.printf("[TOUCH] heartbeat ready=%d\n", (int)CydTouch::isReady());
+      Serial.flush();
+      lastHeartbeat = now;
+    }
     vTaskDelay(20 / portTICK_PERIOD_MS);
   }
 }

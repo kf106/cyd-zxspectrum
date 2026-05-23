@@ -233,8 +233,14 @@ void EmulatorScreen::pressKey(SpecKeys key)
 }
 
 #ifdef CYD_TOUCH_KEYBOARD
-void EmulatorScreen::setCydTouchKeyboard(CydTouchKeyboard *keyboard)
+void EmulatorScreen::setCydHandedness(bool rightHanded)
 {
+  renderer->setCydHandedness(rightHanded);
+}
+
+void EmulatorScreen::setCydTouchKeyboard(CydTouchKeyboard *keyboard, bool rightHanded)
+{
+  renderer->setCydHandedness(rightHanded);
   renderer->setCydTouchKeyboard(keyboard);
 }
 #endif
