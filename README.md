@@ -1,45 +1,121 @@
-# ESP32 Rainbow
+# ZX Spectrum for the Cheap Yellow Display
 
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](./LICENSE)
-[![Build Firmware](https://github.com/atomic14/esp32-zxspectrum/actions/workflows/build_firmware.yml/badge.svg)](https://github.com/atomic14/esp32-zxspectrum/actions/workflows/build_firmware.yml) [![Build Emscripten Apps](https://github.com/atomic14/esp32-zxspectrum/actions/workflows/build_emscripten.yml/badge.svg)](https://github.com/atomic14/esp32-zxspectrum/actions/workflows/build_emscripten.yml) [![Build Desktop App](https://github.com/atomic14/esp32-zxspectrum/actions/workflows/build_desktop.yml/badge.svg)](https://github.com/atomic14/esp32-zxspectrum/actions/workflows/build_desktop.yml)
 
-This repository contains the software for the [ESP32 Rainbow project](https://www.crowdsupply.com/atomic14/esp32-rainbow).
+Firmware that turns a [Cheap Yellow Display (CYD)](https://www.google.com/search?q=esp32+cheap+yellow+display) ESP32-2432S028 into a 48K ZX Spectrum with an on-screen touch keyboard.
 
-![ESP32 Rainbow](docs/images/esp32-rainbow.jpg)
+This project is a CYD-focused port of [atomic14's ESP32 ZX Spectrum emulator](https://github.com/atomic14/esp32-zxspectrum). The upstream tree also contains desktop and web builds; **this repository is maintained for the CYD board**.
 
-The code is designed for my board, but will run on pretty much any ESP32 board.
+## Features
 
-This is currently a work in progress and is under active development. So, I can't guarantee that the code will be stable.
+- Boots straight into the **48K ZX Spectrum** (no model picker)
+- **Resistive touch keyboard** with left- or right-handed layout
+- Spectrum display with borders above the keyboard row
+- **In-emulator menu** (Menu key or touch **Menu**): recalibrate, volume, snapshots, load games, poke, exit
+- **SD card** support for `.z80`, `.sna`, `.tap`, and `.tzx` files
+- Settings and touch calibration stored in LittleFS (`settings.json`), preserved across firmware uploads
 
-## Building the firmware
+## Hardware
 
-You will need to install [Visual Studio Code](https://code.visualstudio.com/download) and [PlatformIO](https://platformio.org/install) to build the code.
+Target board: **ESP32-2432S028** (320×240 ILI9341 TFT, XPT2046 touch, microSD on SPI).
 
-The firmware lives in the `firmware` directory. Open this folder in [Visual Studio Code](https://code.visualstudio.com/download) and PlatformIO will take care of the rest.
+| Function | GPIO |
+|----------|------|
+| TFT SPI | 14 SCLK, 12 MISO, 13 MOSI, 15 CS, 2 DC, 21 BL |
+| Touch (bit-bang) | 33 CS, 36 IRQ, 25 CLK, 39 MISO, 32 MOSI |
+| SD card | 5 CS (shared SPI2 with TFT) |
+| Buzzer (PWM) | 26 |
 
-## Supported boards
+Other ESP32 boards from the upstream project may still build from `firmware/platformio.ini`, but **only `cheap-yellow-display` is the focus here**.
 
-Check the [`platformio.ini` file](firmware/platformio.ini) for the complete list of supported boards.
+## Building and flashing (Ubuntu)
 
-To add a new board make a copy of an existing board section in the file and modify the pins to match your board.
+### Prerequisites
 
-- ESP32 Rainbow
-- Cheap Yellow Display (CYD)
-- LilyGo T-Deck
+Install build tools and USB serial access:
 
-Pretty much any ESP32 board should work, you just need a 320x240 TFT display and either an I2S amplifier or speaker driven with a transistor. If you don't have any sound output options, then just specify a dummy pin for the buzzer.
+```sh
+sudo apt update
+sudo apt install git python3 python3-venv python3-pip
+```
 
-## Input
+Add your user to the `dialout` group so PlatformIO can access the CYD over USB (log out and back in, or reboot, after this):
 
-My board (the [ESP32 Rainbow](https://www.crowdsupply.com/atomic14/esp32-rainbow) has a built-in keyboard and has 2 x QWIIC connectors which can be used to connect a wide range of controllers (e.g. Wii Nunchucks).
+```sh
+sudo usermod -aG dialout $USER
+```
 
-The LilyGo T-Deck has a keyboard, but the firmware for the keyboard is pretty terrible making it very hard to use.
+### One-time setup
 
-The CYD has no keyboard, but you should be able to hook up I2C devices to it.
+Clone this repository and create a local PlatformIO virtual environment in the repo root:
 
-On first boot, the firmware runs a four-corner touch calibration (XPT2046 bit-bang on dedicated GPIOs, with the same plate-ADC corner mapping as [cyd-lords-of-midnight](https://github.com/atomic14/cyd-lords-of-midnight)) and asks for left- or right-handed keyboard layout. Values are stored in LittleFS (`settings.json`) and **are not erased when you upload new firmware**. To run calibration again, use **Erase Flash** in PlatformIO (or `pio run -t erase` then upload), or set `"cydSetupComplete": false` in `settings.json` on the device.
+```sh
+cd cyd-zxspectrum
+python3 -m venv .pio-venv
+.pio-venv/bin/pip install -U pip platformio
+```
 
-Alternatively, you can use some python code in the `keyboard-server` directory to use your desktop keyboard to type. This has only been tested on a Mac - I've no idea if it will work on Windows.
+The first build downloads the ESP32 toolchain and libraries; it can take several minutes.
+
+### Build, flash, and monitor
+
+From the repository root:
+
+```sh
+# Build
+.pio-venv/bin/pio run -e cheap-yellow-display --project-dir firmware
+
+# Flash (CYD connected by USB; usually /dev/ttyUSB0 or /dev/ttyACM0)
+.pio-venv/bin/pio run -e cheap-yellow-display --project-dir firmware -t upload
+
+# Serial monitor (Ctrl+C to exit)
+.pio-venv/bin/pio device monitor --project-dir firmware -b 115200
+```
+
+If upload fails to find the port, list devices and pass the port explicitly:
+
+```sh
+.pio-venv/bin/pio device list
+.pio-venv/bin/pio run -e cheap-yellow-display --project-dir firmware -t upload --upload-port /dev/ttyUSB0
+```
+
+To erase flash and settings (forces touch calibration on next boot):
+
+```sh
+.pio-venv/bin/pio run -e cheap-yellow-display --project-dir firmware -t erase
+.pio-venv/bin/pio run -e cheap-yellow-display --project-dir firmware -t upload
+```
+
+### Optional: VS Code
+
+You can also open the `firmware` folder in [VS Code](https://code.visualstudio.com/) with the [PlatformIO IDE](https://platformio.org/install/ide?install=vscode) extension and use the **cheap-yellow-display** environment from the PlatformIO sidebar.
+
+## First boot
+
+On first boot the firmware:
+
+1. Runs **four-corner touch calibration** (same approach as [cyd-lords-of-midnight](https://github.com/atomic14/cyd-lords-of-midnight))
+2. Asks for **left- or right-handed** keyboard layout
+
+Calibration and settings are written to LittleFS and **are not erased** when you upload new firmware.
+
+To calibrate again:
+
+- Use **Erase Flash** in PlatformIO (`pio run -t erase`, then upload), or
+- Open the in-emulator **Menu → Recalibrate**, or
+- Set `"cydSetupComplete": false` in `settings.json` on the device
+
+## Games and storage
+
+**SD card (recommended):** format as **FAT32**, copy `.z80`, `.sna`, `.tap`, or `.tzx` files to the card root (or use **Menu → Load game / tape** to browse).
+
+**Without SD:** put files in `firmware/data/` and upload the filesystem (`pio run -t uploadfs`).
+
+Snapshots are saved under `/snapshots` on the SD card when present.
+
+## Optional: USB serial keyboard
+
+The `keyboard-server/` directory has Python tooling to send keystrokes over USB serial (useful on a desk with the CYD connected). It has mainly been tested on macOS.
 
 ```sh
 cd keyboard-server
@@ -49,18 +125,15 @@ pip install -r requirements.txt
 python serial_keyboard.py
 ```
 
-## SD Card/Flash Storage
+## Repository layout
 
-The CYD and my board have an SD card slot that is independent of the SPI bus used by the TFT display. This means you can use the SD card slot to store games.
+| Path | Purpose |
+|------|---------|
+| `firmware/` | ESP32 firmware (PlatformIO) |
+| `keyboard-server/` | Host-side serial keyboard helper |
+| `desktop/` | Desktop builds (upstream) |
+| `docs/` | Images and notes |
 
-The LilyGo T-Deck has as SD card but it uses the same SPI bus as the TFT display. I have not managed to get both of them to work simultaneously. If someone wants to dig into this and fix it then please let me know.
+## License
 
-If you can't use the SD card then drop any games (z80 or tzx/tap) into the `data` folder. You will then need to use the platformio menu to upload the filesystem to the device.
-
-For anyone using an SD card, make sure it is formatted with the FAT32 filesystem and drop any games (z80 or tzx/tap) into the root of the card.
-
-## Help Support Development
-
-If you find this project useful and want to help support further development then please consider buying a board from my [Crowd Supply](https://www.crowdsupply.com/atomic14) page.
-
-Or you can back me on [Patreon](https://www.patreon.com/atomic14).
+GPL v3 — see [LICENSE](./LICENSE). Emulator core and much of the firmware derive from atomic14's [esp32-zxspectrum](https://github.com/atomic14/esp32-zxspectrum).
