@@ -68,10 +68,12 @@ private:
     uint16_t loadProgress = 0;
     // should we be rendering
     bool isRunning = false;
+    volatile bool m_drawing = false;
     // keep track of how many frames we've drawn
     uint32_t frameCount = 0;
 #ifdef CYD_TOUCH_KEYBOARD
     CydTouchKeyboard *m_cydTouchKeyboard = nullptr;
+    bool m_cydKeyboardOverlayEnabled = true;
 #endif
 public:
     Renderer(Display &tft, AudioOutput *audioOutput, HDMIDisplay *hdmiDisplay): m_tft(tft), m_audioOutput(audioOutput), m_HDMIDisplay(hdmiDisplay) {
@@ -102,12 +104,13 @@ public:
       free(currentScreenBuffer);
     }
     void triggerDraw(const uint8_t *currentScreen, const uint8_t *borderColors) {
-      if (drawReady) {
-        drawReady = false;
-        memcpy(currentScreenBuffer, currentScreen, 6912);
-        memcpy(currentBorderColors, borderColors, 312);
-        xSemaphoreGive(m_displaySemaphore);
+      memcpy(currentScreenBuffer, currentScreen, 6912);
+      memcpy(currentBorderColors, borderColors, 312);
+      if (!isRunning || !drawReady) {
+        return;
       }
+      drawReady = false;
+      xSemaphoreGive(m_displaySemaphore);
     }
     void setIsLoading(bool loading) {
       isLoading = loading;
@@ -115,10 +118,16 @@ public:
     void pause() {
       isRunning = false;
     }
+    void waitForIdle();
     void resume() {
       isRunning = true;
       firstDraw = true;
     }
+#ifdef CYD_TOUCH_KEYBOARD
+    void setCydKeyboardOverlayEnabled(bool enabled) {
+      m_cydKeyboardOverlayEnabled = enabled;
+    }
+#endif
     uint32_t getFrameCount() {
       return frameCount;
     }

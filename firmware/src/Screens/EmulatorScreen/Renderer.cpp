@@ -17,19 +17,63 @@ void displayTask(void *pvParameters) {
     {
       if (xSemaphoreTake(renderer->m_displaySemaphore, portMAX_DELAY))
       {
-        renderer->drawScreen();
+        if (renderer->isRunning)
+        {
+          renderer->drawScreen();
+        }
+        else
+        {
+          renderer->drawReady = true;
+        }
       }
     }
     else 
     {
       vTaskDelay(100 / portTICK_PERIOD_MS);
     }
-    // if (renderer->isRunning && digitalRead(0) == LOW)
-    // {
-    //   renderer->pause();
-    //   renderer->showSaveSnapshotScreen();
-    // }
   }
+}
+
+void Renderer::waitForIdle()
+{
+  while (m_drawing)
+  {
+    vTaskDelay(1 / portTICK_PERIOD_MS);
+  }
+  m_tft.dmaWait();
+  while (xSemaphoreTake(m_displaySemaphore, 0) == pdTRUE)
+  {
+    drawReady = true;
+  }
+}
+
+void Renderer::drawScreen()
+{
+  m_drawing = true;
+  if (m_HDMIDisplay) {
+    m_tft.dmaWait();
+    m_HDMIDisplay->sendSpectrum(currentScreenBuffer, currentBorderColors);
+  }
+  drawSpectrumScreen();
+#ifdef CYD_TOUCH_KEYBOARD
+  if (m_cydTouchKeyboard != nullptr && m_cydKeyboardOverlayEnabled)
+  {
+    m_tft.startWrite();
+    m_cydTouchKeyboard->drawOverlayIfNeeded(m_tft);
+    m_tft.endWrite();
+  }
+#endif
+#ifndef CYD_NO_EMULATOR_MENU
+  m_tft.startWrite();
+  m_tft.dmaWait();
+  if (isShowingMenu) {
+    drawMenu();
+  } else if (isShowingTimeTravel) {
+    drawTimeTravel();
+  }
+  m_tft.endWrite();
+#endif
+  m_drawing = false;
 }
 
 void Renderer::drawBorder(int startPos, int endPos, int offset, int sideBorderLen, int areaX, int areaW, bool isSideBorders)
@@ -76,33 +120,6 @@ void Renderer::drawBorder(int startPos, int endPos, int offset, int sideBorderLe
       borderPos++;
     }
   }
-}
-
-void Renderer::drawScreen()
-{
-  if (m_HDMIDisplay) {
-    m_tft.dmaWait();
-    m_HDMIDisplay->sendSpectrum(currentScreenBuffer, currentBorderColors);
-  }
-  drawSpectrumScreen();
-#ifdef CYD_TOUCH_KEYBOARD
-  if (m_cydTouchKeyboard != nullptr)
-  {
-    m_tft.startWrite();
-    m_cydTouchKeyboard->drawOverlayIfNeeded(m_tft);
-    m_tft.endWrite();
-  }
-#endif
-#ifndef CYD_NO_EMULATOR_MENU
-  m_tft.startWrite();
-  m_tft.dmaWait();
-  if (isShowingMenu) {
-    drawMenu();
-  } else if (isShowingTimeTravel) {
-    drawTimeTravel();
-  }
-  m_tft.endWrite();
-#endif
 }
 
 #if defined(CYD_EMULATOR_W) && defined(CYD_TOUCH_KEYBOARD)

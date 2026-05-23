@@ -120,7 +120,7 @@ static void drawButton(Display &tft, const HandednessButton &btn, bool pressed)
   tft.drawString(btn.label, btn.x + (btn.w - size.x) / 2, btn.y + (btn.h - size.y) / 2);
 }
 
-static bool runHandednessSelection(Display &tft, ISettings &settings)
+bool CydCalibration::runHandednessSelection(Display &tft, ISettings &settings)
 {
   HandednessButton buttons[2] = {
       {"Left", false, 24, 118, 128, 72},
@@ -211,7 +211,29 @@ bool CydCalibration::runIfNeeded(Display &tft, ISettings &settings)
   tft.endWrite();
   vTaskDelay(2000 / portTICK_PERIOD_MS);
 
-  runHandednessSelection(tft, settings);
+  CydCalibration::runHandednessSelection(tft, settings);
   settings.setCydSetupComplete(true);
   return true;
+}
+
+void CydCalibration::runRecalibration(Display &tft, ISettings &settings)
+{
+  (void)settings;
+  CydTouch::init();
+  s_calTft = &tft;
+  plate_touch_interactive_calibration(calStepUi);
+  s_calTft = nullptr;
+
+  settings.setCydTouchCalibration(CydTouch::calibration());
+
+  tft.startWrite();
+  tft.fillScreen(TFT_BLACK);
+  tft.loadFont(GillSans_25_vlw);
+  tft.setTextColor(TFT_WHITE, TFT_BLACK);
+  Point t1 = tft.measureString("CALIBRATION");
+  tft.drawString("CALIBRATION", (CYD_SCREEN_W - t1.x) / 2, 88);
+  Point t2 = tft.measureString("COMPLETED");
+  tft.drawString("COMPLETED", (CYD_SCREEN_W - t2.x) / 2, 118);
+  tft.endWrite();
+  vTaskDelay(2000 / portTICK_PERIOD_MS);
 }

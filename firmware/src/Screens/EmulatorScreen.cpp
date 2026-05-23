@@ -13,6 +13,10 @@
 #include "PokeScreen.h"
 #include "SaveSnapshotScreen.h"
 #endif
+#ifdef CYD_TOUCH_KEYBOARD
+#include "CydMenuScreen.h"
+#include "../Files/ISettings.h"
+#endif
 #include "EmulatorScreen/Renderer.h"
 #ifdef CYD_TOUCH_KEYBOARD
 #include "../Input/CydTouchKeyboard.h"
@@ -129,6 +133,27 @@ void EmulatorScreen::run(std::string filename, models_enum model)
   machine->start(audioFile);
 }
 
+void EmulatorScreen::didAppear()
+{
+#ifdef CYD_TOUCH_KEYBOARD
+  if (renderer != nullptr)
+  {
+    renderer->setCydKeyboardOverlayEnabled(true);
+  }
+  if (m_cydTouchKeyboard != nullptr)
+  {
+    m_cydTouchKeyboard->invalidateOverlay();
+  }
+#endif
+  resume();
+#ifdef CYD_TOUCH_KEYBOARD
+  if (renderer != nullptr)
+  {
+    renderer->setNeedsRedraw();
+  }
+#endif
+}
+
 void EmulatorScreen::pause()
 {
   renderer->pause();
@@ -151,8 +176,46 @@ void EmulatorScreen::updateKey(SpecKeys key, uint8_t state)
   }
 }
 
+void EmulatorScreen::willDisappear()
+{
+  pause();
+}
+
+void EmulatorScreen::loadGameFile(const char *path)
+{
+  if (path == nullptr || machine == nullptr)
+  {
+    return;
+  }
+  auto bl = BusyLight();
+  drawBusy();
+  std::string ext = path;
+  size_t dot = ext.find_last_of('.');
+  if (dot != std::string::npos)
+  {
+    ext = ext.substr(dot);
+    std::transform(ext.begin(), ext.end(), ext.begin(),
+                   [](unsigned char c) { return (char)std::tolower(c); });
+  }
+  if (ext == ".tap" || ext == ".tzx")
+  {
+    loadTape(path);
+    return;
+  }
+  Load(machine->getMachine(), path);
+  renderer->forceRedraw();
+}
+
 void EmulatorScreen::pressKey(SpecKeys key)
 {
+#ifdef CYD_TOUCH_KEYBOARD
+  if (key == SPECKEY_MENU)
+  {
+    m_menuRequested = true;
+    m_menuOpenDelay = 3;
+    return;
+  }
+#endif
 #ifndef CYD_NO_EMULATOR_MENU
   if (key == SPECKEY_MENU)
   {
@@ -220,14 +283,45 @@ void EmulatorScreen::pressKey(SpecKeys key)
 }
 
 #ifdef CYD_TOUCH_KEYBOARD
+void EmulatorScreen::openMenuIfRequested()
+{
+  if (m_menuOpenDelay > 0)
+  {
+    m_menuOpenDelay--;
+    return;
+  }
+  if (!m_menuRequested)
+  {
+    return;
+  }
+  m_menuRequested = false;
+  pause();
+  renderer->setCydKeyboardOverlayEnabled(false);
+  renderer->waitForIdle();
+  m_navigationStack->push(new CydMenuScreen(
+      m_tft,
+      m_hdmiDisplay,
+      m_audioOutput,
+      m_files,
+      this,
+      machine,
+      m_cydSettings,
+      m_cydTouchKeyboard));
+}
+
 void EmulatorScreen::setCydHandedness(bool rightHanded)
 {
   renderer->setCydHandedness(rightHanded);
 }
 
-void EmulatorScreen::setCydTouchKeyboard(CydTouchKeyboard *keyboard, bool rightHanded)
+void EmulatorScreen::setCydTouchKeyboard(CydTouchKeyboard *keyboard, ISettings *settings)
 {
-  renderer->setCydHandedness(rightHanded);
+  m_cydTouchKeyboard = keyboard;
+  m_cydSettings = settings;
+  if (settings != nullptr)
+  {
+    renderer->setCydHandedness(settings->isCydRightHanded());
+  }
   renderer->setCydTouchKeyboard(keyboard);
 }
 #endif

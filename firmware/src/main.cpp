@@ -69,6 +69,8 @@ void setup(void)
   pinMode(BOARD_POWERON, OUTPUT);
   digitalWrite(BOARD_POWERON, HIGH);
   #endif
+  Serial.setTxBufferSize(20000);
+  Serial.setRxBufferSize(20000);
   Serial.begin(115200);
   #ifdef POWER_PIN
   pinMode(POWER_PIN, OUTPUT);
@@ -196,7 +198,7 @@ void setup(void)
       [&](SpecKeys key, bool down) { navigationStack->updateKey(key, down); },
       cydRightHanded,
       [&](SpecKeys key) { navigationStack->pressKey(key); });
-  emulatorScreen->setCydTouchKeyboard(cydTouchKeyboard, cydRightHanded);
+  emulatorScreen->setCydTouchKeyboard(cydTouchKeyboard, settings);
   cydTouchKeyboard->start();
 #endif
   emulatorScreen->run("", models_enum::SPECMDL_48K);
@@ -248,7 +250,15 @@ void setup(void)
 #endif
   while (true)
   {
-    vTaskDelay(100 / portTICK_PERIOD_MS);
+    vTaskDelay(20 / portTICK_PERIOD_MS);
+#ifdef CYD_TOUCH_KEYBOARD
+    emulatorScreen->openMenuIfRequested();
+    Screen *topScreen = navigationStack->getTop();
+    if (topScreen != nullptr && topScreen->isCydMenu())
+    {
+      topScreen->pollCydMenuTouch();
+    }
+#endif
 #ifndef CYD_NO_EMULATOR_MENU
     if (digitalRead(0) == LOW)
     {

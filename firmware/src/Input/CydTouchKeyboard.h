@@ -43,12 +43,16 @@ public:
 
   CydTouchKeyboard(KeyEventType keyEvent, bool rightHanded = false, KeyPressType pressEvent = nullptr);
   void start();
+  void setRightHanded(bool rightHanded);
+  void setEnabled(bool enabled);
+  void invalidateOverlay();
   void drawOverlayIfNeeded(Display &tft);
   static void fillRectAvoidingKeys(Display &tft, int16_t x, int16_t y, int16_t w, int16_t h, uint16_t color);
 
 private:
   KeyEventType m_keyEvent;
   KeyPressType m_pressKeyEvent;
+  volatile bool m_enabled = true;
   CydKeyDef *m_keys = nullptr;
   size_t m_keyCount = 0;
 

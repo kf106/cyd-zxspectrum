@@ -152,10 +152,39 @@ CydTouchKeyboard::CydTouchKeyboard(KeyEventType keyEvent, bool rightHanded, KeyP
   selectRow(0);
 }
 
+void CydTouchKeyboard::setRightHanded(bool rightHanded)
+{
+  layoutKeys(rightHanded);
+  m_highlightIndex = -1;
+  m_lastDrawnHighlight = -1;
+  m_overlayDrawn = false;
+  m_modifierVisualDirty = true;
+  m_bottomRowVisualDirty = true;
+  m_rowSelectVisualDirty = true;
+}
+
+void CydTouchKeyboard::setEnabled(bool enabled)
+{
+  m_enabled = enabled;
+  if (!enabled && (m_activeKey != SPECKEY_NONE || m_activeRowSelect >= 0))
+  {
+    releaseActiveKey();
+  }
+}
+
+void CydTouchKeyboard::invalidateOverlay()
+{
+  m_overlayDrawn = false;
+  m_modifierVisualDirty = true;
+  m_bottomRowVisualDirty = true;
+  m_rowSelectVisualDirty = true;
+  m_lastDrawnHighlight = -1;
+}
+
 void CydTouchKeyboard::start()
 {
   CydTouch::init();
-  xTaskCreatePinnedToCore(keyboardTask, "cydTouchKb", 4096, this, 1, nullptr, 0);
+  xTaskCreatePinnedToCore(keyboardTask, "cydTouchKb", 8192, this, 1, nullptr, 0);
 }
 
 bool CydTouchKeyboard::isModifierKey(SpecKeys key) const
@@ -592,6 +621,10 @@ bool CydTouchKeyboard::readTouch(int16_t &x, int16_t &y)
 
 void CydTouchKeyboard::pollTouch()
 {
+  if (!m_enabled)
+  {
+    return;
+  }
   int16_t x = 0;
   int16_t y = 0;
   if (!readTouch(x, y))

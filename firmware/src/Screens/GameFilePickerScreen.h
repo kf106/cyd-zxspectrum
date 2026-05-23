@@ -1,7 +1,9 @@
-#pragma
+#pragma once
 
+#include <algorithm>
 #include "PickerScreen.h"
 #include "../Files/Files.h"
+#include "../Emulator/snaps.h"
 #include "EmulatorScreen.h"
 
 class GameFilePickerScreen : public PickerScreen<FileInfoPtr>
@@ -21,14 +23,20 @@ class GameFilePickerScreen : public PickerScreen<FileInfoPtr>
         }
         // if we found the emulator screen and if we're loading a tape file then we've been triggered due to the user starting the
         // load routine from the emulator screen. We just need to tell the emulator screen to load the tape file and pop back to it
-        if (emulatorScreen != nullptr && (item->getExtension() == ".tap" || item->getExtension() == ".tzx")) {
-          Serial.println("Loading tape file into existing emulator screen");
-          // pop to the emaulator screen - get a local copy of the stack as it will be set to null when we pop
+        std::string ext = item->getExtension();
+        std::transform(ext.begin(), ext.end(), ext.begin(),
+                       [](unsigned char c) { return (char)std::tolower(c); });
+        if (emulatorScreen != nullptr &&
+            (ext == ".tap" || ext == ".tzx" || ext == ".z80" || ext == ".sna"))
+        {
+          Serial.println("Loading file into existing emulator screen");
           NavigationStack *navStack = m_navigationStack;
-          while(navStack->stack.back() != emulatorScreen) {
+          while (navStack->stack.size() > 1 && navStack->stack.back() != emulatorScreen)
+          {
             navStack->pop();
           }
-          emulatorScreen->loadTape(item->getPath());
+          drawBusy();
+          emulatorScreen->loadGameFile(item->getPath().c_str());
           return;
         }
         Serial.println("Starting new emulator screen");
