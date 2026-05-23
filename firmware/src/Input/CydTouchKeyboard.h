@@ -54,7 +54,7 @@ private:
 
   bool m_capShiftLatched = false;
   bool m_symShiftLatched = false;
-  bool m_extendedModePending = false;
+  bool m_modifierPassThrough = false;
   bool m_capShiftComboActive = false;
   SpecKeys m_activeKey = SPECKEY_NONE;
   int8_t m_activeRowSelect = -1;
@@ -82,8 +82,6 @@ private:
   void cancelCapShift();
   void cancelSymShift();
   void releaseLatchedModifiers();
-  void enterExtendedMode();
-  void cancelExtendedMode();
   void selectRow(int8_t row);
   bool isModifierKey(SpecKeys key) const;
   bool isRowSelectKey(const CydKeyDef &key) const;

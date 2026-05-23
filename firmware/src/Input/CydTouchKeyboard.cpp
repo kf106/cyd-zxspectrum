@@ -245,20 +245,6 @@ void CydTouchKeyboard::releaseLatchedModifiers()
 {
   cancelCapShift();
   cancelSymShift();
-  m_extendedModePending = false;
-}
-
-void CydTouchKeyboard::enterExtendedMode()
-{
-  latchCapShift();
-  latchSymShift();
-  m_extendedModePending = true;
-  m_modifierVisualDirty = true;
-}
-
-void CydTouchKeyboard::cancelExtendedMode()
-{
-  releaseLatchedModifiers();
 }
 
 void CydTouchKeyboard::releaseActiveKey()
@@ -278,17 +264,15 @@ void CydTouchKeyboard::releaseActiveKey()
   }
   if (m_activeKey == SPECKEY_SHIFT)
   {
-    if (m_extendedModePending)
+    if (m_modifierPassThrough)
     {
-      cancelExtendedMode();
+      m_keyEvent(SPECKEY_SHIFT, false);
+      m_modifierPassThrough = false;
+      cancelSymShift();
     }
     else if (m_capShiftLatched)
     {
       cancelCapShift();
-    }
-    else if (m_symShiftLatched)
-    {
-      enterExtendedMode();
     }
     else
     {
@@ -297,17 +281,15 @@ void CydTouchKeyboard::releaseActiveKey()
   }
   else if (m_activeKey == SPECKEY_SYMB)
   {
-    if (m_extendedModePending)
+    if (m_modifierPassThrough)
     {
-      cancelExtendedMode();
+      m_keyEvent(SPECKEY_SYMB, false);
+      m_modifierPassThrough = false;
+      cancelCapShift();
     }
     else if (m_symShiftLatched)
     {
       cancelSymShift();
-    }
-    else if (m_capShiftLatched)
-    {
-      enterExtendedMode();
     }
     else
     {
@@ -378,8 +360,8 @@ void CydTouchKeyboard::drawKey(Display &tft, size_t index) const
   }
   const CydKeyDef &k = m_keys[index];
   bool pressed = m_highlightIndex == (int)index;
-  bool latched = (k.key == SPECKEY_SHIFT && (m_capShiftLatched || m_extendedModePending)) ||
-                 (k.key == SPECKEY_SYMB && (m_symShiftLatched || m_extendedModePending)) ||
+  bool latched = (k.key == SPECKEY_SHIFT && m_capShiftLatched) ||
+                 (k.key == SPECKEY_SYMB && m_symShiftLatched) ||
                  (k.rowSelectIndex >= 0 && k.rowSelectIndex == m_rowSelectLatched);
   uint16_t fill = pressed ? 0x52AA : (latched ? 0x4A69 : 0x3186);
   tft.fillRect(k.x, k.y, k.w, k.h, fill);
@@ -493,6 +475,16 @@ void CydTouchKeyboard::pressKeyAt(int index)
   if (isModifierKey(key))
   {
     m_activeKey = key;
+    if (key == SPECKEY_SHIFT && m_symShiftLatched)
+    {
+      m_keyEvent(SPECKEY_SHIFT, true);
+      m_modifierPassThrough = true;
+    }
+    else if (key == SPECKEY_SYMB && m_capShiftLatched)
+    {
+      m_keyEvent(SPECKEY_SYMB, true);
+      m_modifierPassThrough = true;
+    }
     return;
   }
   if (key == SPECKEY_MENU)
