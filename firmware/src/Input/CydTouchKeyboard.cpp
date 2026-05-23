@@ -85,20 +85,18 @@ static int16_t modifierColumnX(bool rightHanded)
   return rightHanded ? (int16_t)CYD_MODIFIER_COLUMN_X_RIGHT : (int16_t)CYD_MODIFIER_COLUMN_X_LEFT;
 }
 
-static void layoutKeys(bool rightHanded)
+static void layoutKeyGeometry(bool rightHanded)
 {
   s_rightHanded = rightHanded;
   const int16_t modX = modifierColumnX(rightHanded);
 
   for (int i = 0; i < CydTouchKeyboard::BOTTOM_KEY_COUNT; i++)
   {
-    s_keys[CYD_BOTTOM_KEY_INDEX + i] = {
-        (int16_t)(i * CYD_KEY_W),
-        (int16_t)CYD_BOTTOM_ROW_Y,
-        (int16_t)CYD_KEY_W,
-        (int16_t)CYD_KEY_H,
-        SPECKEY_NONE,
-        ""};
+    CydKeyDef &key = s_keys[CYD_BOTTOM_KEY_INDEX + i];
+    key.x = (int16_t)(i * CYD_KEY_W);
+    key.y = (int16_t)CYD_BOTTOM_ROW_Y;
+    key.w = (int16_t)CYD_KEY_W;
+    key.h = (int16_t)CYD_KEY_H;
   }
   s_keys[CYD_SYM_KEY_INDEX] = {
       modX,
@@ -127,6 +125,11 @@ static void layoutKeys(bool rightHanded)
         rowLabels[rowIndex],
         rowIndex};
   }
+}
+
+static void layoutKeys(bool rightHanded)
+{
+  layoutKeyGeometry(rightHanded);
 }
 
 CydTouchKeyboard::CydTouchKeyboard(KeyEventType keyEvent, bool rightHanded) : m_keyEvent(keyEvent)
@@ -315,7 +318,7 @@ void CydTouchKeyboard::releaseActiveKey()
 
 void CydTouchKeyboard::fillRectAvoidingKeys(Display &tft, int16_t x, int16_t y, int16_t w, int16_t h, uint16_t color)
 {
-  layoutKeys(s_rightHanded);
+  // Use s_keys geometry only — layoutKeys() clears bottom-row labels/keys.
   for (int16_t row = y; row < y + h; row++)
   {
     int16_t spanStart = x;
