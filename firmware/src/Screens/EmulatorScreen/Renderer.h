@@ -9,6 +9,7 @@ void displayTask(void *pvParameters);
 
 class HDMIDisplay;
 class AudioOutput;
+class CydTouchKeyboard;
 class Renderer {
 private:
     Display &m_tft;
@@ -36,16 +37,21 @@ private:
     const int screenHeight = TFT_HEIGHT;
     const int borderWidth = (screenWidth - 256) / 2;
     const int borderHeight = (screenHeight - 192) / 2;
-    // draw the borders
+    const int spectrumOriginX = borderWidth;
+#ifdef CYD_SPECTRUM_TOP
+    const int spectrumOriginY = CYD_SPECTRUM_TOP;
+#else
+    const int spectrumOriginY = borderHeight;
+#endif
     void drawBorder(int startPos, int endPos, int offset, int length, int drawWidth, int drawHeight, bool isSideBorders);
     // draw the screen
     void drawScreen();
     // draw the spectrum screen
     void drawSpectrumScreen();
-    // draw the menu
+#ifndef CYD_NO_EMULATOR_MENU
     void drawMenu();
-    // draw the time travel screen
     void drawTimeTravel();
+#endif
     // display task - runs continuously and draws the screen
     // controlled bu the m_displaySemaphore
     friend void displayTask(void *pvParameters);
@@ -56,6 +62,9 @@ private:
     bool isRunning = false;
     // keep track of how many frames we've drawn
     uint32_t frameCount = 0;
+#ifdef CYD_TOUCH_KEYBOARD
+    CydTouchKeyboard *m_cydTouchKeyboard = nullptr;
+#endif
 public:
     Renderer(Display &tft, AudioOutput *audioOutput, HDMIDisplay *hdmiDisplay): m_tft(tft), m_audioOutput(audioOutput), m_HDMIDisplay(hdmiDisplay) {
       // enough for a row of 8 pixels
@@ -125,6 +134,11 @@ public:
     void setNeedsRedraw() {
       firstDraw = true;
     }
+#ifdef CYD_TOUCH_KEYBOARD
+    void setCydTouchKeyboard(CydTouchKeyboard *keyboard) {
+      m_cydTouchKeyboard = keyboard;
+    }
+#endif
     void forceRedraw(const uint8_t *currentScreen = nullptr, const uint8_t *borderColors = nullptr) {
       bootLog("render", "forceRedraw (sync draw)");
       if (currentScreen != nullptr) {
@@ -137,6 +151,8 @@ public:
       drawScreen();
       bootLog("render", "forceRedraw complete");
     }
+#ifndef CYD_NO_EMULATOR_MENU
     bool isShowingMenu = false;
     bool isShowingTimeTravel = false;
+#endif
 };

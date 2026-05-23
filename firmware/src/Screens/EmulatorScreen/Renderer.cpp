@@ -1,4 +1,7 @@
 #include "Renderer.h"
+#ifdef CYD_TOUCH_KEYBOARD
+#include "../../Input/CydTouchKeyboard.h"
+#endif
 #include "../../TFT/HDMIDisplay.h"
 #include "../../Emulator/spectrum.h"
 #include "../fonts/GillSans_15_vlw.h"
@@ -60,14 +63,21 @@ void Renderer::drawBorder(int startPos, int endPos, int offset, int length, int 
 
       if (isSideBorders)
       {
-        // Draw left and right borders
-        m_tft.fillRect(0, rangeStart, length, rangeLength, tftColor);                  // Left side
-        m_tft.fillRect(drawWidth - length, rangeStart, length, rangeLength, tftColor); // Right side
+#ifdef CYD_TOUCH_KEYBOARD
+        CydTouchKeyboard::fillRectAvoidingKeys(m_tft, 0, rangeStart, length, rangeLength, tftColor);
+        CydTouchKeyboard::fillRectAvoidingKeys(m_tft, drawWidth - length, rangeStart, length, rangeLength, tftColor);
+#else
+        m_tft.fillRect(0, rangeStart, length, rangeLength, tftColor);
+        m_tft.fillRect(drawWidth - length, rangeStart, length, rangeLength, tftColor);
+#endif
       }
       else
       {
-        // Draw top or bottom borders
+#ifdef CYD_TOUCH_KEYBOARD
+        CydTouchKeyboard::fillRectAvoidingKeys(m_tft, 0, rangeStart, drawWidth, rangeLength, tftColor);
+#else
         m_tft.fillRect(0, rangeStart, drawWidth, rangeLength, tftColor);
+#endif
       }
     }
     else
@@ -84,6 +94,15 @@ void Renderer::drawScreen()
     m_HDMIDisplay->sendSpectrum(currentScreenBuffer, currentBorderColors);
   }
   drawSpectrumScreen();
+#ifdef CYD_TOUCH_KEYBOARD
+  if (m_cydTouchKeyboard != nullptr)
+  {
+    m_tft.startWrite();
+    m_cydTouchKeyboard->drawOverlayIfNeeded(m_tft);
+    m_tft.endWrite();
+  }
+#endif
+#ifndef CYD_NO_EMULATOR_MENU
   m_tft.startWrite();
   m_tft.dmaWait();
   if (isShowingMenu) {
@@ -92,31 +111,46 @@ void Renderer::drawScreen()
     drawTimeTravel();
   }
   m_tft.endWrite();
+#endif
 }
 
 void Renderer::drawSpectrumScreen() {
   if (isLoading)
   {
-    int position = loadProgress * screenWidth / 100;
+    int position = loadProgress * 256 / 100;
+#ifdef CYD_SPECTRUM_TOP
+    m_tft.fillRect(spectrumOriginX + position, spectrumOriginY, 256 - position, 8, TFT_BLACK);
+    m_tft.fillRect(spectrumOriginX, spectrumOriginY, position, 8, TFT_GREEN);
+#else
     m_tft.fillRect(position, 0, screenWidth - position, 8, TFT_BLACK);
     m_tft.fillRect(0, 0, position, 8, TFT_GREEN);
+#endif
   }
-  int borderOffset = 36;
 
-  int borderHeightSkip = (isShowingMenu | isShowingTimeTravel) ? MENU_BAR_HEIGHT : isLoading ? 8 : 0;
-
-  // Draw the top border
+  const int borderOffset = 36;
+  int borderHeightSkip = isLoading ? 8 : 0;
+#ifndef CYD_NO_EMULATOR_MENU
+  if (isShowingMenu | isShowingTimeTravel) {
+    borderHeightSkip = MENU_BAR_HEIGHT;
+  }
+#endif
+#ifdef CYD_SPECTRUM_TOP
+  drawBorder(borderHeightSkip, spectrumOriginY, borderOffset, screenWidth, screenWidth, 0, false);
+  drawBorder(spectrumOriginY + 192, screenHeight, borderOffset, screenWidth, screenWidth, 0, false);
+  drawBorder(spectrumOriginY, spectrumOriginY + 192, borderOffset, spectrumOriginX, screenWidth, 0, true);
+#else
   drawBorder(borderHeightSkip, borderHeight, borderOffset, screenWidth, screenWidth, borderHeight, false);
-
-  // Draw the bottom border - unless we are showing the menu which includes the bottom volume bar
+  int bottomBorderSkip = 0;
+#ifndef CYD_NO_EMULATOR_MENU
   if (!isShowingMenu) {
     drawBorder(screenHeight - borderHeight, screenHeight, borderOffset, screenWidth, screenWidth, borderHeight, false);
   }
-
-  int bottomBorderSkip = isShowingMenu ? VOLUME_BAR_HEIGHT : 0;
-
-  // Draw the left and right borders
+  bottomBorderSkip = isShowingMenu ? VOLUME_BAR_HEIGHT : 0;
+#else
+  drawBorder(screenHeight - borderHeight, screenHeight, borderOffset, screenWidth, screenWidth, borderHeight, false);
+#endif
   drawBorder(borderHeightSkip, screenHeight - borderHeight - bottomBorderSkip, borderOffset, borderWidth, screenWidth, borderHeight, true);
+#endif
   // do the pixels
   uint8_t *attrBase = currentScreenBuffer + 0x1800;
   uint8_t *pixelBase = currentScreenBuffer;
@@ -154,10 +188,10 @@ void Renderer::drawSpectrumScreen() {
       uint16_t tftInkColor = specpal565[inkColor];
       uint16_t tftPaperColor = specpal565[paperColor];
       const uint32_t u32Lookup[4] = {
-        tftPaperColor | (tftPaperColor << 16), // 00
-        tftPaperColor | (tftInkColor << 16), // 01
-        tftInkColor | (tftPaperColor << 16), // 10
-        tftInkColor | (tftInkColor << 16) // 11
+        static_cast<uint32_t>(tftPaperColor) | (static_cast<uint32_t>(tftPaperColor) << 16), // 00
+        static_cast<uint32_t>(tftPaperColor) | (static_cast<uint32_t>(tftInkColor) << 16),   // 01
+        static_cast<uint32_t>(tftInkColor) | (static_cast<uint32_t>(tftPaperColor) << 16),   // 10
+        static_cast<uint32_t>(tftInkColor) | (static_cast<uint32_t>(tftInkColor) << 16)      // 11
       };
       for (int y = 0; y < 8; y++)
       {
@@ -204,10 +238,8 @@ void Renderer::drawSpectrumScreen() {
     }
     if (dirty || firstDraw)
     {
-      if (!isShowingMenu || borderHeight + attrY * 8 < m_tft.height() - VOLUME_BAR_HEIGHT) { 
-        m_tft.setWindow(borderWidth, borderHeight + attrY * 8, borderWidth + 255, borderHeight + attrY * 8 + 7);
-        m_tft.pushPixels(pixelBuffer, 256 * 8);
-      }
+      m_tft.setWindow(spectrumOriginX, spectrumOriginY + attrY * 8, spectrumOriginX + 255, spectrumOriginY + attrY * 8 + 7);
+      m_tft.pushPixels(pixelBuffer, 256 * 8);
     }
   }
   drawReady = true;
@@ -221,6 +253,7 @@ void Renderer::drawSpectrumScreen() {
 
 }
 
+#ifndef CYD_NO_EMULATOR_MENU
 void Renderer::drawTimeTravel() {
     m_tft.fillRect(0, 0, m_tft.width(), 20, TFT_BLACK);
 
@@ -269,3 +302,4 @@ void Renderer::drawMenu() {
     int currentVolumeWidth = volumeRectWidth * m_audioOutput->getVolume() / 10;
     m_tft.fillRect(volumeRectX, volumeRectY, currentVolumeWidth, volumeRectHeight, TFT_GREEN);
 }
+#endif

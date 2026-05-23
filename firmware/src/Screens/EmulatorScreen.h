@@ -11,6 +11,7 @@ class TouchKeyboard;
 class Machine;
 class GameLoader;
 class Renderer;
+class CydTouchKeyboard;
 class IFiles;
 class HDMIDisplay;
 
@@ -36,4 +37,8 @@ class EmulatorScreen : public Screen
       resume();
     }
     void loadTape(std::string filename);
+    Renderer *getRenderer() { return renderer; }
+#ifdef CYD_TOUCH_KEYBOARD
+    void setCydTouchKeyboard(CydTouchKeyboard *keyboard);
+#endif
 };

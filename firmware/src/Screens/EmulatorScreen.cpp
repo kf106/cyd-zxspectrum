@@ -9,9 +9,14 @@
 #include "AlphabetPicker.h"
 #include "GameFilePickerScreen.h"
 #include "NavigationStack.h"
+#ifndef CYD_NO_EMULATOR_MENU
 #include "PokeScreen.h"
 #include "SaveSnapshotScreen.h"
+#endif
 #include "EmulatorScreen/Renderer.h"
+#ifdef CYD_TOUCH_KEYBOARD
+#include "../Input/CydTouchKeyboard.h"
+#endif
 #include "EmulatorScreen/Machine.h"
 #include "EmulatorScreen/GameLoader.h"
 #include "../BootLog.h"
@@ -154,19 +159,9 @@ void EmulatorScreen::resume()
 
 void EmulatorScreen::updateKey(SpecKeys key, uint8_t state)
 {
-  // TODO audio capture
-  // if (key == SPECKEY_0)
-  // {
-  //   if (audioFile)
-  //   {
-  //     machine->pause();
-  //     vTaskDelay(1000 / portTICK_PERIOD_MS);
-  //     fclose(audioFile);
-  //     audioFile = NULL;
-  //     Serial.printf("Audio file closed\n");
-  //   }
-  // }
+#ifndef CYD_NO_EMULATOR_MENU
   if (!renderer->isShowingTimeTravel)
+#endif
   {
     machine->updateKey(key, state);
   }
@@ -174,6 +169,7 @@ void EmulatorScreen::updateKey(SpecKeys key, uint8_t state)
 
 void EmulatorScreen::pressKey(SpecKeys key)
 {
+#ifndef CYD_NO_EMULATOR_MENU
   if (key == SPECKEY_MENU)
   {
     if (renderer->isShowingMenu) {
@@ -205,7 +201,7 @@ void EmulatorScreen::pressKey(SpecKeys key)
         renderer->forceRedraw();
       }
     }
-  } else if (renderer->isShowingMenu) 
+  } else if (renderer->isShowingMenu)
   {
     if (key == SPECKEY_1) {
       renderer->isShowingMenu = false;
@@ -215,7 +211,6 @@ void EmulatorScreen::pressKey(SpecKeys key)
     }
     else if (key == SPECKEY_2) {
       renderer->isShowingMenu = false;
-      // show the save snapshot UI
       m_navigationStack->push(new SaveSnapshotScreen(m_tft, m_hdmiDisplay, m_audioOutput, machine->getMachine(), m_files));
     } else if (key == SPECKEY_P) {
       renderer->isShowingMenu = false;
@@ -225,14 +220,24 @@ void EmulatorScreen::pressKey(SpecKeys key)
       machine->resume();
       renderer->forceRedraw();
     } else if (key == SPECKEY_5) {
-    m_audioOutput->volumeDown();
+      m_audioOutput->volumeDown();
       renderer->forceRedraw();
     } else if (key == SPECKEY_8) {
       m_audioOutput->volumeUp();
       renderer->forceRedraw();
     }
   }
+#else
+  (void)key;
+#endif
 }
+
+#ifdef CYD_TOUCH_KEYBOARD
+void EmulatorScreen::setCydTouchKeyboard(CydTouchKeyboard *keyboard)
+{
+  renderer->setCydTouchKeyboard(keyboard);
+}
+#endif
 
 void EmulatorScreen::loadTape(std::string filename)
 {

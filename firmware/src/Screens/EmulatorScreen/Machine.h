@@ -54,8 +54,8 @@ private:
   }
 public:
   TimeTravel() {
-#ifdef CYD_SKIP_TIME_TRAVEL
-    Serial.println("Time travel disabled on CYD (insufficient RAM)");
+#ifdef CYD_NO_EMULATOR_MENU
+    Serial.println("Time travel disabled on CYD");
 #else
     // allocate some memory banks (~3.75MB pool for 30s rewind at 50fps)
     for (int i = 0; i < 240; i++) {
@@ -75,7 +75,7 @@ public:
 #endif
   }
   bool isEnabled() {
-#ifdef CYD_SKIP_TIME_TRAVEL
+#ifdef CYD_NO_EMULATOR_MENU
     return false;
 #else
     return !memoryBanks.empty();
@@ -190,10 +190,10 @@ class Machine {
     FILE *audioFile = nullptr;
     // keeps track of how many tstates we've run
     uint32_t cycleCount = 0;
-    // time travel
-    TimeTravel *timeTravel;
-    // current time travel position
+#ifndef CYD_NO_EMULATOR_MENU
+    TimeTravel *timeTravel = nullptr;
     int timeTravelPosition = 0;
+#endif
     // callback for when rom loading routine is hit
     std::function<void()> romLoadingRoutineHitCallback;
   public:
@@ -207,11 +207,11 @@ class Machine {
     void resume() {
       isRunning = true;
     }
+#ifndef CYD_NO_EMULATOR_MENU
     void startTimeTravel() {
       if (!timeTravel->isEnabled()) {
         return;
       }
-      // record the current state
       timeTravel->record(machine);
       timeTravelPosition = timeTravel->size() - 1;
       Serial.printf("Starting time travel %d\n", timeTravelPosition);
@@ -235,6 +235,7 @@ class Machine {
     void stopTimeTravel() {
       timeTravel->reset(timeTravelPosition);
     }
+#endif
     ZXSpectrum *getMachine() {
       return machine;
     }

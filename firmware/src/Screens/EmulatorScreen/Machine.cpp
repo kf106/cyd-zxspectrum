@@ -35,10 +35,11 @@ void Machine::runEmulator() {
         Serial.printf("Executed at %.3FMHz cycles, frame rate=%.2f\n", cycles, fps);
         renderer->resetFrameCount();
         cycleCount = 0;
-        // save the state of the machine for time travel (disabled on CYD)
+#ifndef CYD_NO_EMULATOR_MENU
         if (timeTravel->isEnabled()) {
           timeTravel->record(machine);
         }
+#endif
         Serial.printf("Free heap: %d\n", ESP.getFreeHeap());
         Serial.printf("Free PSRAM: %d\n", ESP.getFreePsram());
       }
@@ -77,7 +78,9 @@ Machine::Machine(Renderer *renderer, AudioOutput *audioOutput, std::function<voi
   {
     bootLogf("z80", "ZXSpectrum OK static RAM (heap=%u)", ESP.getFreeHeap());
   }
+#ifndef CYD_NO_EMULATOR_MENU
   timeTravel = new TimeTravel();
+#endif
 }
 
 void Machine::updateKey(SpecKeys key, uint8_t state) {

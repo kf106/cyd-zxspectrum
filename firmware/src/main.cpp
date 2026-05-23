@@ -42,6 +42,10 @@
 #ifdef TOUCH_KEYBOARD_V2
 #include "Input/TouchKeyboardV2.h"
 #endif
+#ifdef CYD_TOUCH_KEYBOARD
+#include "Input/CydTouchKeyboard.h"
+#include "Screens/CydCalibration.h"
+#endif
 #include "SerialInterface/PacketHandler.h"
 #include "SerialInterface/SerialTransport.h"
 #include "SerialInterface/Messages/GetVersion.h"
@@ -209,12 +213,23 @@ void setup(void)
   {
     Serial.println("Failed to create /snapshots directory");
   }
+#ifdef CYD_TOUCH_KEYBOARD
+  bootLog("main", "CYD calibration check");
+  CydCalibration::runIfNeeded(*tft, *settings);
+#endif
   bootLog("main", "create EmulatorScreen");
   EmulatorScreen *emulatorScreen = new EmulatorScreen(*tft, hdmiDisplay, audioOutput, files);
   bootLog("main", "push EmulatorScreen on nav stack");
   navigationStack->push(emulatorScreen);
   bootLog("main", "EmulatorScreen::run (48K)");
   emulatorScreen->run("", models_enum::SPECMDL_48K);
+#ifdef CYD_TOUCH_KEYBOARD
+  CydTouchKeyboard *cydTouchKeyboard = new CydTouchKeyboard(
+      [&](SpecKeys key, bool down) { navigationStack->updateKey(key, down); },
+      settings->isCydRightHanded());
+  emulatorScreen->setCydTouchKeyboard(cydTouchKeyboard);
+  cydTouchKeyboard->start();
+#endif
   bootLog("main", "EmulatorScreen::run returned — entering main loop");
   // start off the keyboard and feed keys into the active scene
   // SerialKeyboard *keyboard = new SerialKeyboard([&](SpecKeys key, bool down)
@@ -259,13 +274,14 @@ void setup(void)
   );
 
   bootLogf("main", "setup complete, core=%d", xPortGetCoreID());
-  // use the boot pin to open the emulator menu
+#ifndef CYD_NO_EMULATOR_MENU
   pinMode(0, INPUT_PULLUP);
-  // just keep running
   bool bootButtonWasPressed = false;
+#endif
   while (true)
   {
     vTaskDelay(100 / portTICK_PERIOD_MS);
+#ifndef CYD_NO_EMULATOR_MENU
     if (digitalRead(0) == LOW)
     {
       navigationStack->updateKey(SPECKEY_MENU, true);
@@ -277,6 +293,7 @@ void setup(void)
       navigationStack->pressKey(SPECKEY_MENU);
       bootButtonWasPressed = false;
     }
+#endif
   }
 }
 
