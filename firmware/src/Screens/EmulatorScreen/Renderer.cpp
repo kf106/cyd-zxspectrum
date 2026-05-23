@@ -307,9 +307,14 @@ void Renderer::drawMenu() {
     m_tft.loadFont(GillSans_15_vlw);
     m_tft.setTextColor(TFT_WHITE, TFT_BLACK);
     
-    Point menuSize = m_tft.measureString("1-Time Travel  2-Snapshot  ENTER-Resume");
+#ifdef CYD_NO_TIME_TRAVEL
+    const char *menuLine = "2-Snapshot  P-Poke  ENTER-Resume";
+#else
+    const char *menuLine = "1-Time Travel  2-Snapshot  ENTER-Resume";
+#endif
+    Point menuSize = m_tft.measureString(menuLine);
     int centerX = (m_tft.width() - menuSize.x) / 2;
-    m_tft.drawString("1-Time Travel  2-Snapshot  ENTER-Resume", centerX, 0);
+    m_tft.drawString(menuLine, centerX, 0);
 
     // Draw the volume control
     const char *volumeText = "<5       Volume       8>";

@@ -187,13 +187,16 @@ void EmulatorScreen::pressKey(SpecKeys key)
     }
   } else if (renderer->isShowingMenu)
   {
+#ifdef CYD_NO_TIME_TRAVEL
+    if (key == SPECKEY_2) {
+#else
     if (key == SPECKEY_1) {
       renderer->isShowingMenu = false;
       renderer->isShowingTimeTravel = true;
       machine->startTimeTravel();
       renderer->forceRedraw();
-    }
-    else if (key == SPECKEY_2) {
+    } else if (key == SPECKEY_2) {
+#endif
       renderer->isShowingMenu = false;
       m_navigationStack->push(new SaveSnapshotScreen(m_tft, m_hdmiDisplay, m_audioOutput, machine->getMachine(), m_files));
     } else if (key == SPECKEY_P) {

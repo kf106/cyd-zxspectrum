@@ -54,8 +54,8 @@ private:
   }
 public:
   TimeTravel() {
-#ifdef CYD_NO_EMULATOR_MENU
-    Serial.println("Time travel disabled on CYD");
+#if defined(CYD_NO_EMULATOR_MENU) || defined(CYD_NO_TIME_TRAVEL)
+    Serial.println("Time travel disabled (insufficient RAM on this build)");
 #else
     // allocate some memory banks (~3.75MB pool for 30s rewind at 50fps)
     for (int i = 0; i < 240; i++) {
@@ -75,7 +75,7 @@ public:
 #endif
   }
   bool isEnabled() {
-#ifdef CYD_NO_EMULATOR_MENU
+#if defined(CYD_NO_EMULATOR_MENU) || defined(CYD_NO_TIME_TRAVEL)
     return false;
 #else
     return !memoryBanks.empty();
