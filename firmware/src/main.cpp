@@ -55,9 +55,6 @@
 #include "SerialInterface/Messages/DeleteFile.h"
 #include "SerialInterface/Messages/MakeDirectory.h"
 #include "SerialInterface/Messages/RenameFile.h"
-#include "BootLog.h"
-#include <esp_system.h>
-
 void SerialInterfaceTask(void *arg) {
   PacketHandler *packetHandler = (PacketHandler *) arg;
   while(true) {
@@ -73,25 +70,12 @@ void setup(void)
   digitalWrite(BOARD_POWERON, HIGH);
   #endif
   Serial.begin(115200);
-  Serial.println();
-  Serial.println("=== cyd-zxspectrum boot ===");
-  Serial.flush();
-#ifdef BOOT_DEBUG
-  delay(500); // brief pause so USB-serial can attach after reset
-#endif
-  bootLogResetReason();
-  bootLog("main", "Serial started");
-  bootLogf("main", "Free heap=%u PSRAM=%u", ESP.getFreeHeap(), ESP.getFreePsram());
   #ifdef POWER_PIN
   pinMode(POWER_PIN, OUTPUT);
   digitalWrite(POWER_PIN, POWER_PIN_ON);
   vTaskDelay(100);
   #endif
-#ifdef HARDWARE_VERSION_STRING
-  bootLogf("main", "board=%s", HARDWARE_VERSION_STRING);
-#endif
   #ifdef TFT_MOSI
-  bootLog("main", "init SPI bus for TFT");
   spi_bus_config_t buscfg = {};
   buscfg.mosi_io_num = TFT_MOSI;
   buscfg.miso_io_num = TFT_MISO;
@@ -102,19 +86,11 @@ void setup(void)
   buscfg.flags = SPICOMMON_BUSFLAG_MASTER;
   buscfg.intr_flags = 0;
   esp_err_t spi2_err = spi_bus_initialize(SPI2_HOST, &buscfg, SPI_DMA_CH_AUTO);
-  if (spi2_err != ESP_OK)
-  {
-    bootLogf("main", "SPI2 init FAILED: %s", esp_err_to_name(spi2_err));
-  }
-  else
-  {
-    bootLog("main", "SPI bus ready");
-  }
+  (void)spi2_err;
   #endif
   // Files
   SDCard *sdFileSystem = nullptr;
   #ifdef USE_SDCARD
-  bootLog("main", "init SD card");
     #ifdef USE_SDIO
       sdFileSystem = new SDCard(SDCard::DEFAULT_MOUNT_POINT, SD_CARD_CLK, SD_CARD_CMD, SD_CARD_D0, SD_CARD_D1, SD_CARD_D2, SD_CARD_D3);
       // TODO setupUSB(fileSystem);
@@ -126,9 +102,7 @@ void setup(void)
         sdFileSystem = new SDCard(SDCard::DEFAULT_MOUNT_POINT, SD_CARD_CS);
       #endif
     #endif
-  bootLog("main", "SD card ctor done");
   #endif
-  bootLog("main", "init LittleFS");
   FilesImplementation<SDCard> *sdFiles = new FilesImplementation<SDCard>(sdFileSystem);
   FlashLittleFS *spiffsFileSystem = new FlashLittleFS(FlashLittleFS::DEFAULT_MOUNT_POINT);
   FilesImplementation<FlashLittleFS> *spiffsFiles = new FilesImplementation<FlashLittleFS>(spiffsFileSystem);
@@ -136,16 +110,12 @@ void setup(void)
   IFiles *files = new UnifiedStorage(spiffsFiles, sdFiles);
   
   ISettings *settings = new Settings(spiffsFiles);
-  bootLog("main", "storage ready");
 
   #ifdef TFT_ST7789
-  bootLog("main", "create ST7789 display");
   Display *tft = new ST7789(TFT_CS, TFT_DC, TFT_RST, TFT_BL, TFT_WIDTH, TFT_HEIGHT);
   #endif
   #ifdef TFT_ILI9341
-  bootLog("main", "create ILI9341 display");
   Display *tft = new ILI9341(TFT_CS, TFT_DC, TFT_RST, TFT_BL, TFT_WIDTH, TFT_HEIGHT);
-  bootLog("main", "display driver constructed");
   #endif
   HDMIDisplay *hdmiDisplay = nullptr; // new HDMIDisplay(GPIO_NUM_7);
   // navigation stack
@@ -156,7 +126,6 @@ void setup(void)
   audioOutput = new DACOutput(I2S_NUM_0, settings);
 #endif
 #ifdef BUZZER_GPIO_NUM
-  bootLog("main", "create buzzer audio");
   audioOutput = new BuzzerOutput(BUZZER_GPIO_NUM, settings);
 #endif
 #ifdef PDM_GPIO_NUM
@@ -208,7 +177,6 @@ void setup(void)
   tDeckKeyboard->start();
 #endif
   if (audioOutput) {
-    bootLog("main", "start audio");
     audioOutput->start(15625);
   }
   // create the directory structure
@@ -217,26 +185,20 @@ void setup(void)
     Serial.println("Failed to create /snapshots directory");
   }
 #ifdef CYD_TOUCH_KEYBOARD
-  bootLog("main", "CYD calibration check");
   CydCalibration::runIfNeeded(*tft, *settings);
 #endif
-  bootLog("main", "create EmulatorScreen");
   EmulatorScreen *emulatorScreen = new EmulatorScreen(*tft, hdmiDisplay, audioOutput, files);
-  bootLog("main", "push EmulatorScreen on nav stack");
   navigationStack->push(emulatorScreen);
 #ifdef CYD_TOUCH_KEYBOARD
   const bool cydRightHanded = settings->isCydRightHanded();
   emulatorScreen->setCydHandedness(cydRightHanded);
-  bootLog("main", "start CYD touch keyboard");
   CydTouchKeyboard *cydTouchKeyboard = new CydTouchKeyboard(
       [&](SpecKeys key, bool down) { navigationStack->updateKey(key, down); },
       cydRightHanded);
   emulatorScreen->setCydTouchKeyboard(cydTouchKeyboard, cydRightHanded);
   cydTouchKeyboard->start();
 #endif
-  bootLog("main", "EmulatorScreen::run (48K)");
   emulatorScreen->run("", models_enum::SPECMDL_48K);
-  bootLog("main", "EmulatorScreen::run returned — entering main loop");
   // start off the keyboard and feed keys into the active scene
   // SerialKeyboard *keyboard = new SerialKeyboard([&](SpecKeys key, bool down)
   //                                               { navigationStack->updateKey(key, down); if (down) { navigationStack->pressKey(key); } });
@@ -279,7 +241,6 @@ void setup(void)
     1
   );
 
-  bootLogf("main", "setup complete, core=%d", xPortGetCoreID());
 #ifndef CYD_NO_EMULATOR_MENU
   pinMode(0, INPUT_PULLUP);
   bool bootButtonWasPressed = false;

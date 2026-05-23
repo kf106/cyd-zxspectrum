@@ -2,8 +2,6 @@
 #include "Serial.h"
 #include "ILI9341.h"
 #include "esp_log.h"
-#include "../BootLog.h"
-
 #define ILI9341_NOP 0x00
 #define ILI9341_SWRESET 0x01
 #define ILI9341_RDDID 0x04
@@ -68,7 +66,6 @@
 ILI9341::ILI9341(gpio_num_t cs, gpio_num_t dc, gpio_num_t rst, gpio_num_t bl, int width, int height)
     : TFTDisplay(cs, dc, rst, bl, width, height)
 {
-    bootLog("display", "ILI9341 init begin");
     // CYD ties RST to the board reset line (GPIO_NUM_NC) — only pulse if wired
     if (rst != GPIO_NUM_NC)
     {
@@ -103,7 +100,6 @@ ILI9341::ILI9341(gpio_num_t cs, gpio_num_t dc, gpio_num_t rst, gpio_num_t bl, in
     SEND_CMD_DATA(0x29); // Display on
     delay(120);
     fillScreen(TFT_BLACK);
-    bootLogf("display", "ILI9341 ready %dx%d", width, height);
 }
 
 ILI9341::~ILI9341()

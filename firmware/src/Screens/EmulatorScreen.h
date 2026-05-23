@@ -2,8 +2,6 @@
 
 #include <string>
 #include "Screen.h"
-#include "../BootLog.h"
-
 class Display;
 class AudioOutput;
 class ZXSpectrum;
@@ -33,7 +31,6 @@ class EmulatorScreen : public Screen
     void pause();
     void resume();
     void didAppear() {
-      bootLog("emu", "didAppear — resume renderer/machine");
       resume();
     }
     void loadTape(std::string filename);

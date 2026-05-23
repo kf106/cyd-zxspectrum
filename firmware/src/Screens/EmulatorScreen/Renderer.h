@@ -3,7 +3,6 @@
 #include <string.h>
 #include "../../TFT/Display.h"
 #include "../../Serial.h"
-#include "../../BootLog.h"
 #include "../../CydLayout.h"
 
 void displayTask(void *pvParameters);
@@ -109,17 +108,6 @@ public:
         memcpy(currentBorderColors, borderColors, 312);
         xSemaphoreGive(m_displaySemaphore);
       }
-#ifdef BOOT_DEBUG
-      else
-      {
-        static uint8_t skipLogCount = 0;
-        if (skipLogCount < 8)
-        {
-          bootLog("render", "triggerDraw skipped (display busy)");
-          skipLogCount++;
-        }
-      }
-#endif
     }
     void setIsLoading(bool loading) {
       isLoading = loading;
@@ -157,7 +145,6 @@ public:
     }
 #endif
     void forceRedraw(const uint8_t *currentScreen = nullptr, const uint8_t *borderColors = nullptr) {
-      bootLog("render", "forceRedraw (sync draw)");
       if (currentScreen != nullptr) {
         memcpy(currentScreenBuffer, currentScreen, 6912);
       }
@@ -166,7 +153,6 @@ public:
       }
       firstDraw = true;
       drawScreen();
-      bootLog("render", "forceRedraw complete");
     }
 #ifndef CYD_NO_EMULATOR_MENU
     bool isShowingMenu = false;

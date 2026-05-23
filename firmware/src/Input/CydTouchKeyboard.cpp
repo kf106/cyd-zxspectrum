@@ -2,7 +2,6 @@
 #include "CydTouchDriver.h"
 #include "../CydLayout.h"
 #include "../TFT/Display.h"
-#include "../BootLog.h"
 #include "cyd_touch/plate_touch.h"
 #include "../Screens/fonts/GillSans_15_vlw.h"
 
@@ -141,14 +140,6 @@ CydTouchKeyboard::CydTouchKeyboard(KeyEventType keyEvent, bool rightHanded) : m_
 void CydTouchKeyboard::start()
 {
   CydTouch::init();
-  if (!CydTouch::isReady())
-  {
-    bootLog("touch", "keyboard started but touch driver NOT ready");
-  }
-  else
-  {
-    bootLog("touch", "keyboard task starting");
-  }
   xTaskCreatePinnedToCore(keyboardTask, "cydTouchKb", 4096, this, 1, nullptr, 0);
 }
 
@@ -576,9 +567,6 @@ bool CydTouchKeyboard::readTouch(int16_t &x, int16_t &y)
 
 void CydTouchKeyboard::pollTouch()
 {
-#if CYD_TOUCH_DEBUG
-  plate_touch_debug_poll("kb");
-#endif
   int16_t x = 0;
   int16_t y = 0;
   if (!readTouch(x, y))
@@ -615,31 +603,14 @@ void CydTouchKeyboard::pollTouch()
   }
   releaseActiveKey();
   pressKeyAt(index);
-#ifdef BOOT_DEBUG
-  static uint8_t touchLogCount = 0;
-  if (touchLogCount < 12)
-  {
-    bootLogf("touch", "key %d (%s) at %d,%d", index, m_keys[index].label, x, y);
-    touchLogCount++;
-  }
-#endif
 }
 
 void CydTouchKeyboard::keyboardTask(void *arg)
 {
   CydTouchKeyboard *kb = (CydTouchKeyboard *)arg;
-  bootLog("touch", "CYD touch keyboard task running");
-  uint32_t lastHeartbeat = 0;
   while (true)
   {
     kb->pollTouch();
-    const uint32_t now = millis();
-    if (now - lastHeartbeat >= 5000)
-    {
-      Serial.printf("[TOUCH] heartbeat ready=%d\n", (int)CydTouch::isReady());
-      Serial.flush();
-      lastHeartbeat = now;
-    }
     vTaskDelay(20 / portTICK_PERIOD_MS);
   }
 }

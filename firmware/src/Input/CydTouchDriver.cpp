@@ -1,6 +1,5 @@
 #include "CydTouchDriver.h"
 #include "cyd_touch/plate_touch.h"
-#include "../BootLog.h"
 #include "esp_log.h"
 
 static const char *TAG = "CydTouch";
@@ -45,13 +44,11 @@ void CydTouch::init()
   if (err != ESP_OK)
   {
     ESP_LOGE(TAG, "plate_touch_init failed: %s", esp_err_to_name(err));
-    bootLogf("touch", "init FAILED: %s", esp_err_to_name(err));
     s_touch_ready = false;
     return;
   }
   s_touch_ready = true;
   ESP_LOGI(TAG, "touch ready");
-  bootLog("touch", "init OK (bit-bang XPT2046)");
 }
 
 bool CydTouch::isReady()

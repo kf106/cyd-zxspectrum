@@ -32,9 +32,6 @@ void plate_touch_get_cal(plate_touch_cal_t *out);
 void plate_touch_set_cal(const plate_touch_cal_t *cal);
 void plate_touch_set_idle_callback(plate_touch_idle_cb_t cb);
 
-/** Throttled printf diagnostics when CYD_TOUCH_DEBUG is set. */
-void plate_touch_debug_poll(const char *context);
-
 #ifdef __cplusplus
 }
 #endif

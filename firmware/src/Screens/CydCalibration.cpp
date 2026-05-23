@@ -100,11 +100,6 @@ static void calStepUi(int step_index, const char *colour_name, uint16_t colour_r
   paintCalScreen();
 }
 
-static void calIdlePump(void)
-{
-  plate_touch_debug_poll("cal");
-}
-
 struct HandednessButton
 {
   const char *label;
@@ -153,7 +148,6 @@ static bool runHandednessSelection(Display &tft, ISettings &settings)
 
   while (!selected)
   {
-    plate_touch_debug_poll("handedness");
     int16_t x = 0;
     int16_t y = 0;
     if (CydTouch::readScreen(x, y))
@@ -201,9 +195,7 @@ bool CydCalibration::runIfNeeded(Display &tft, ISettings &settings)
   }
 
   s_calTft = &tft;
-  plate_touch_set_idle_callback(calIdlePump);
   plate_touch_interactive_calibration(calStepUi);
-  plate_touch_set_idle_callback(nullptr);
   s_calTft = nullptr;
 
   settings.setCydTouchCalibration(CydTouch::calibration());
