@@ -40,9 +40,9 @@ private:
     const int emulatorWidth = CYD_EMULATOR_W;
     const int emulatorHeight = CYD_EMULATOR_H;
     const int spectrumOriginY = cydSpectrumOriginY();
-    int emulatorOriginX = CYD_EMULATOR_X_RIGHT;
-    int spectrumOriginX = CYD_EMULATOR_X_RIGHT + cydSpectrumSideBorder(true);
-    int sideBorderLen = cydSpectrumSideBorder(true);
+    int emulatorOriginX = cydEmulatorOriginX(false);
+    int spectrumOriginX = cydSpectrumOriginX(false);
+    int sideBorderLen = cydSpectrumSideBorder(false);
     void drawCydBorders();
 #endif
 #if !defined(CYD_EMULATOR_W) || !defined(CYD_TOUCH_KEYBOARD)

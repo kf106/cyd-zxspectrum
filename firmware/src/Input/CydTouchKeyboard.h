@@ -39,14 +39,16 @@ public:
   static constexpr int BOTTOM_KEY_COUNT = CydKeyRowDef::BOTTOM_KEY_COUNT;
 
   using KeyEventType = std::function<void(SpecKeys key, bool isPressed)>;
+  using KeyPressType = std::function<void(SpecKeys key)>;
 
-  CydTouchKeyboard(KeyEventType keyEvent, bool rightHanded = false);
+  CydTouchKeyboard(KeyEventType keyEvent, bool rightHanded = false, KeyPressType pressEvent = nullptr);
   void start();
   void drawOverlayIfNeeded(Display &tft);
   static void fillRectAvoidingKeys(Display &tft, int16_t x, int16_t y, int16_t w, int16_t h, uint16_t color);
 
 private:
   KeyEventType m_keyEvent;
+  KeyPressType m_pressKeyEvent;
   CydKeyDef *m_keys = nullptr;
   size_t m_keyCount = 0;
 

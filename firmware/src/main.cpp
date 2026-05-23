@@ -194,7 +194,8 @@ void setup(void)
   emulatorScreen->setCydHandedness(cydRightHanded);
   CydTouchKeyboard *cydTouchKeyboard = new CydTouchKeyboard(
       [&](SpecKeys key, bool down) { navigationStack->updateKey(key, down); },
-      cydRightHanded);
+      cydRightHanded,
+      [&](SpecKeys key) { navigationStack->pressKey(key); });
   emulatorScreen->setCydTouchKeyboard(cydTouchKeyboard, cydRightHanded);
   cydTouchKeyboard->start();
 #endif

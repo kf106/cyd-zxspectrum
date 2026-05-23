@@ -9,14 +9,17 @@ static const int CYD_SCREEN_W = 320;
 static bool s_rightHanded = false;
 
 static const int CYD_KEY_W = 32;
-static const int CYD_KEY_H = 26;
+static const int CYD_BOTTOM_ROW_H = CYD_KEYBOARD_ROW_H;
+static const int CYD_BOTTOM_ROW_Y = CYD_KEYBOARD_ROW_Y;
 static const int CYD_MODIFIER_KEY_W = 32;
 static const int CYD_MODIFIER_KEY_H = 32;
-static const int CYD_BOTTOM_ROW_Y = 240 - CYD_KEY_H;
+static const int CYD_MENU_KEY_W = 32;
+static const int CYD_MENU_KEY_H = 32;
+static const int CYD_MENU_KEY_Y = 2;
 static const int CYD_MODIFIER_COLUMN_X_LEFT = 0;
 static const int CYD_MODIFIER_COLUMN_X_RIGHT = CYD_SCREEN_W - CYD_MODIFIER_KEY_W;
-static const int CYD_LEFT_MOD_H = CYD_KEY_H;
-// Left column (bottom to top): Sym, Caps (26px), then R4–R1 (32px).
+static const int CYD_LEFT_MOD_H = CYD_BOTTOM_ROW_H;
+// Modifier column (bottom to top): bottom row (26px), Sym, Caps (26px), R4–R1 (32px), Menu (32px).
 static const int CYD_SYM_Y = CYD_BOTTOM_ROW_Y - CYD_LEFT_MOD_H;
 static const int CYD_CAPS_Y = CYD_SYM_Y - CYD_LEFT_MOD_H;
 
@@ -29,12 +32,13 @@ static const int CYD_BOTTOM_KEY_INDEX = 0;
 static const int CYD_CAPS_KEY_INDEX = 10;
 static const int CYD_SYM_KEY_INDEX = 11;
 static const int CYD_ROW_SELECT_INDEX = 12;
+static const int CYD_MENU_KEY_INDEX = 16;
 static const int CYD_ROW_HIT_PAD_X = 6;
 static const int CYD_ROW_HIT_PAD_TOP = 14;
 static const int CYD_ROW_HIT_PAD_BOTTOM = 4;
 static const int CYD_LEFT_STRIP_PLAYFIELD_X = CYD_MODIFIER_KEY_W + 8;
 
-static const int CYD_KEY_COUNT = 16;
+static const int CYD_KEY_COUNT = 17;
 static CydKeyDef s_keys[CYD_KEY_COUNT];
 
 static const CydKeyRowDef kKeyRows[CydTouchKeyboard::ROW_COUNT] = {
@@ -96,7 +100,7 @@ static void layoutKeyGeometry(bool rightHanded)
     key.x = (int16_t)(i * CYD_KEY_W);
     key.y = (int16_t)CYD_BOTTOM_ROW_Y;
     key.w = (int16_t)CYD_KEY_W;
-    key.h = (int16_t)CYD_KEY_H;
+    key.h = (int16_t)CYD_BOTTOM_ROW_H;
   }
   s_keys[CYD_SYM_KEY_INDEX] = {
       modX,
@@ -112,6 +116,13 @@ static void layoutKeyGeometry(bool rightHanded)
       (int16_t)CYD_LEFT_MOD_H,
       SPECKEY_SHIFT,
       "Caps"};
+  s_keys[CYD_MENU_KEY_INDEX] = {
+      modX,
+      (int16_t)CYD_MENU_KEY_Y,
+      (int16_t)CYD_MENU_KEY_W,
+      (int16_t)CYD_MENU_KEY_H,
+      SPECKEY_MENU,
+      "Menu"};
   const char *rowLabels[CydTouchKeyboard::ROW_COUNT] = {"R1", "R2", "R3", "R4"};
   for (int slot = 0; slot < CydTouchKeyboard::ROW_COUNT; slot++)
   {
@@ -132,7 +143,8 @@ static void layoutKeys(bool rightHanded)
   layoutKeyGeometry(rightHanded);
 }
 
-CydTouchKeyboard::CydTouchKeyboard(KeyEventType keyEvent, bool rightHanded) : m_keyEvent(keyEvent)
+CydTouchKeyboard::CydTouchKeyboard(KeyEventType keyEvent, bool rightHanded, KeyPressType pressEvent)
+    : m_keyEvent(keyEvent), m_pressKeyEvent(pressEvent)
 {
   layoutKeys(rightHanded);
   m_keys = s_keys;
@@ -300,6 +312,14 @@ void CydTouchKeyboard::releaseActiveKey()
     else
     {
       latchSymShift();
+    }
+  }
+  else if (m_activeKey == SPECKEY_MENU)
+  {
+    m_keyEvent(SPECKEY_MENU, false);
+    if (m_pressKeyEvent)
+    {
+      m_pressKeyEvent(SPECKEY_MENU);
     }
   }
   else
@@ -475,6 +495,12 @@ void CydTouchKeyboard::pressKeyAt(int index)
     m_activeKey = key;
     return;
   }
+  if (key == SPECKEY_MENU)
+  {
+    m_activeKey = SPECKEY_MENU;
+    m_keyEvent(SPECKEY_MENU, true);
+    return;
+  }
   m_activeKey = key;
   if (def.withCapShift)
   {
@@ -541,6 +567,10 @@ bool CydTouchKeyboard::hitKeyRect(const CydKeyDef &k, int16_t x, int16_t y) cons
 
 int CydTouchKeyboard::hitTest(int16_t x, int16_t y) const
 {
+  if (hitKeyRect(m_keys[CYD_MENU_KEY_INDEX], x, y))
+  {
+    return CYD_MENU_KEY_INDEX;
+  }
   for (int slot = 0; slot < ROW_COUNT; slot++)
   {
     size_t i = CYD_ROW_SELECT_INDEX + (ROW_COUNT - 1 - slot);
