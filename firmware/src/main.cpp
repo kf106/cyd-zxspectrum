@@ -27,7 +27,7 @@
 #include "Files/Files.h"
 #include "Files/Settings.h"
 #include "Screens/NavigationStack.h"
-#include "Screens/MainMenuScreen.h"
+#include "Screens/EmulatorScreen.h"
 #include "Input/SerialKeyboard.h"
 #include "Input/Nunchuck.h"
 #include "Input/AdafruitSeeSaw.h"
@@ -42,6 +42,10 @@
 #ifdef TOUCH_KEYBOARD_V2
 #include "Input/TouchKeyboardV2.h"
 #endif
+#ifdef CYD_TOUCH_KEYBOARD
+#include "Input/CydTouchKeyboard.h"
+#include "Screens/CydCalibration.h"
+#endif
 #include "SerialInterface/PacketHandler.h"
 #include "SerialInterface/SerialTransport.h"
 #include "SerialInterface/Messages/GetVersion.h"
@@ -51,7 +55,6 @@
 #include "SerialInterface/Messages/DeleteFile.h"
 #include "SerialInterface/Messages/MakeDirectory.h"
 #include "SerialInterface/Messages/RenameFile.h"
-
 void SerialInterfaceTask(void *arg) {
   PacketHandler *packetHandler = (PacketHandler *) arg;
   while(true) {
@@ -66,41 +69,26 @@ void setup(void)
   pinMode(BOARD_POWERON, OUTPUT);
   digitalWrite(BOARD_POWERON, HIGH);
   #endif
+  Serial.setTxBufferSize(20000);
+  Serial.setRxBufferSize(20000);
   Serial.begin(115200);
-  // for(int i = 0; i < 5; i++) {
-  //   BusyLight bl;
-  //   vTaskDelay(pdMS_TO_TICKS(1000));
-  //   Serial.println("Booting...");
-  // }
-  // print out avialable ram
-  Serial.printf("Free heap: %d\n", ESP.getFreeHeap());
-  Serial.printf("Free PSRAM: %d\n", ESP.getFreePsram());
   #ifdef POWER_PIN
   pinMode(POWER_PIN, OUTPUT);
   digitalWrite(POWER_PIN, POWER_PIN_ON);
   vTaskDelay(100);
   #endif
-  Serial.println("Starting up");
   #ifdef TFT_MOSI
-  Serial.println("Starting up SPI");
-  // Initialize SPI
-  spi_bus_config_t buscfg = {
-      .mosi_io_num = TFT_MOSI,
-      .miso_io_num = TFT_MISO,
-      .sclk_io_num = TFT_SCLK,
-      .quadwp_io_num = -1,
-      .quadhd_io_num = -1,
-      .data4_io_num = -1,
-      .data5_io_num = -1,
-      .data6_io_num = -1,
-      .data7_io_num = -1,
-      .max_transfer_sz = 65535,
-      .flags = SPICOMMON_BUSFLAG_MASTER,
-      //.isr_cpu_id = ESP_INTR_CPU_AFFINITY_1,
-      .intr_flags = 0,
-  };
-  ESP_ERROR_CHECK(spi_bus_initialize(SPI2_HOST, &buscfg, SPI_DMA_CH_AUTO));
-  Serial.println("SPI initialized");
+  spi_bus_config_t buscfg = {};
+  buscfg.mosi_io_num = TFT_MOSI;
+  buscfg.miso_io_num = TFT_MISO;
+  buscfg.sclk_io_num = TFT_SCLK;
+  buscfg.quadwp_io_num = -1;
+  buscfg.quadhd_io_num = -1;
+  buscfg.max_transfer_sz = 65535;
+  buscfg.flags = SPICOMMON_BUSFLAG_MASTER;
+  buscfg.intr_flags = 0;
+  esp_err_t spi2_err = spi_bus_initialize(SPI2_HOST, &buscfg, SPI_DMA_CH_AUTO);
+  (void)spi2_err;
   #endif
   // Files
   SDCard *sdFileSystem = nullptr;
@@ -198,8 +186,22 @@ void setup(void)
   {
     Serial.println("Failed to create /snapshots directory");
   }
-  MainMenuScreen menuPicker(*tft, hdmiDisplay, audioOutput, files);
-  navigationStack->push(&menuPicker);
+#ifdef CYD_TOUCH_KEYBOARD
+  CydCalibration::runIfNeeded(*tft, *settings);
+#endif
+  EmulatorScreen *emulatorScreen = new EmulatorScreen(*tft, hdmiDisplay, audioOutput, files);
+  navigationStack->push(emulatorScreen);
+#ifdef CYD_TOUCH_KEYBOARD
+  const bool cydRightHanded = settings->isCydRightHanded();
+  emulatorScreen->setCydHandedness(cydRightHanded);
+  CydTouchKeyboard *cydTouchKeyboard = new CydTouchKeyboard(
+      [&](SpecKeys key, bool down) { navigationStack->updateKey(key, down); },
+      cydRightHanded,
+      [&](SpecKeys key) { navigationStack->pressKey(key); });
+  emulatorScreen->setCydTouchKeyboard(cydTouchKeyboard, settings);
+  cydTouchKeyboard->start();
+#endif
+  emulatorScreen->run("", models_enum::SPECMDL_48K);
   // start off the keyboard and feed keys into the active scene
   // SerialKeyboard *keyboard = new SerialKeyboard([&](SpecKeys key, bool down)
   //                                               { navigationStack->updateKey(key, down); if (down) { navigationStack->pressKey(key); } });
@@ -242,14 +244,22 @@ void setup(void)
     1
   );
 
-  Serial.println("Running on core: " + String(xPortGetCoreID()));
-  // use the boot pin to open the emulator menu
+#ifndef CYD_NO_EMULATOR_MENU
   pinMode(0, INPUT_PULLUP);
-  // just keep running
   bool bootButtonWasPressed = false;
+#endif
   while (true)
   {
-    vTaskDelay(100 / portTICK_PERIOD_MS);
+    vTaskDelay(20 / portTICK_PERIOD_MS);
+#ifdef CYD_TOUCH_KEYBOARD
+    emulatorScreen->openMenuIfRequested();
+    Screen *topScreen = navigationStack->getTop();
+    if (topScreen != nullptr && topScreen->isCydMenu())
+    {
+      topScreen->pollCydMenuTouch();
+    }
+#endif
+#ifndef CYD_NO_EMULATOR_MENU
     if (digitalRead(0) == LOW)
     {
       navigationStack->updateKey(SPECKEY_MENU, true);
@@ -261,6 +271,7 @@ void setup(void)
       navigationStack->pressKey(SPECKEY_MENU);
       bootButtonWasPressed = false;
     }
+#endif
   }
 }
 

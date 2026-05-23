@@ -2,7 +2,6 @@
 #include "Serial.h"
 #include "ILI9341.h"
 #include "esp_log.h"
-
 #define ILI9341_NOP 0x00
 #define ILI9341_SWRESET 0x01
 #define ILI9341_RDDID 0x04
@@ -67,11 +66,14 @@
 ILI9341::ILI9341(gpio_num_t cs, gpio_num_t dc, gpio_num_t rst, gpio_num_t bl, int width, int height)
     : TFTDisplay(cs, dc, rst, bl, width, height)
 {
-    // Reset the display
-    gpio_set_level(rst, 0);
-    vTaskDelay(pdMS_TO_TICKS(100));
-    gpio_set_level(rst, 1);
-    vTaskDelay(pdMS_TO_TICKS(100));
+    // CYD ties RST to the board reset line (GPIO_NUM_NC) — only pulse if wired
+    if (rst != GPIO_NUM_NC)
+    {
+        gpio_set_level(rst, 0);
+        vTaskDelay(pdMS_TO_TICKS(100));
+        gpio_set_level(rst, 1);
+        vTaskDelay(pdMS_TO_TICKS(100));
+    }
 
     SEND_CMD_DATA(0xEF, 0x03, 0x80, 0x02);
     SEND_CMD_DATA(0xCF, 0x00, 0xC1, 0x30);
@@ -97,9 +99,7 @@ ILI9341::ILI9341(gpio_num_t cs, gpio_num_t dc, gpio_num_t rst, gpio_num_t bl, in
     delay(120);
     SEND_CMD_DATA(0x29); // Display on
     delay(120);
-    fillScreen(TFT_GREEN);
-
-    Serial.println("ILI9341 initialized");
+    fillScreen(TFT_BLACK);
 }
 
 ILI9341::~ILI9341()

@@ -85,12 +85,19 @@ TFTDisplay::TFTDisplay(gpio_num_t cs, gpio_num_t dc, gpio_num_t rst, gpio_num_t 
 {
   mDisplayLock = xSemaphoreCreateBinary();
   xSemaphoreGive(mDisplayLock);
-  pinMode(rst, OUTPUT);
+  if (rst != GPIO_NUM_NC)
+  {
+    pinMode(rst, OUTPUT);
+  }
   pinMode(dc, OUTPUT);
   if (bl != GPIO_NUM_NC)
   {
     gpio_set_direction(bl, GPIO_MODE_OUTPUT);
-    gpio_set_level(bl, 1); // Turn on backlight
+#ifdef TFT_BACKLIGHT_ON
+    gpio_set_level(bl, TFT_BACKLIGHT_ON);
+#else
+    gpio_set_level(bl, 1);
+#endif
   }
 
   spi_device_interface_config_t devcfg = {

@@ -35,8 +35,8 @@ void TDeckKeyboard::readKeyboard() {
             Serial.println(keyValue);
             // is it a valid spec key?
             // convert to uppercase
-            if (letterToSpecKeys.find(keyValue) != letterToSpecKeys.end()) {
-              std::vector<SpecKeys> keys = letterToSpecKeys.at(keyValue);
+            if (letterToSpecKeysMap().find(keyValue) != letterToSpecKeysMap().end()) {
+              std::vector<SpecKeys> keys = letterToSpecKeysMap().at(keyValue);
               for (SpecKeys key : keys) {
                 keysPressed.push_back(key);
                 m_keyPressedEvent(key);

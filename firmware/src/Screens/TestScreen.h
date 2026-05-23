@@ -92,8 +92,8 @@ private:
 
       std::string keyMsg = "Key Pressed: ";
       if (key != SPECKEY_NONE) {
-        auto it = specKeyToLetter.find(key);
-        if (it != specKeyToLetter.end()) {
+        auto it = specKeyToLetterMap().find(key);
+        if (it != specKeyToLetterMap().end()) {
           keyMsg += it->second;
         } else {
           // Special keys without a letter representation

@@ -1,7 +1,6 @@
 #include "./Machine.h"
 #include "./Renderer.h"
 #include "../../AudioOutput/AudioOutput.h"
-
 void runnerTask(void *pvParameter)
 {
   Machine *machine = (Machine *)pvParameter;
@@ -10,6 +9,7 @@ void runnerTask(void *pvParameter)
 
 void Machine::runEmulator() {
   unsigned long lastTime = millis();
+  bool romLoadCallbackFired = false;
   while (1)
   {
     if (isRunning)
@@ -26,14 +26,25 @@ void Machine::runEmulator() {
         Serial.printf("Executed at %.3FMHz cycles, frame rate=%.2f\n", cycles, fps);
         renderer->resetFrameCount();
         cycleCount = 0;
-        // save the state of the machine for time travel
-        timeTravel->record(machine);
+#ifndef CYD_NO_EMULATOR_MENU
+        if (timeTravel->isEnabled()) {
+          timeTravel->record(machine);
+        }
+#endif
         Serial.printf("Free heap: %d\n", ESP.getFreeHeap());
         Serial.printf("Free PSRAM: %d\n", ESP.getFreePsram());
       }
       if (machine->romLoadingRoutineHit)
       {
-        romLoadingRoutineHitCallback();
+        if (!romLoadCallbackFired)
+        {
+          romLoadCallbackFired = true;
+          romLoadingRoutineHitCallback();
+        }
+      }
+      else
+      {
+        romLoadCallbackFired = false;
       }
     }
     else
@@ -46,9 +57,10 @@ void Machine::runEmulator() {
 
 Machine::Machine(Renderer *renderer, AudioOutput *audioOutput, std::function<void()> romLoadingRoutineHitCallback)
 : renderer(renderer), audioOutput(audioOutput), romLoadingRoutineHitCallback(romLoadingRoutineHitCallback) {
-  Serial.println("Creating machine");
   machine = new ZXSpectrum();
+#ifndef CYD_NO_EMULATOR_MENU
   timeTravel = new TimeTravel();
+#endif
 }
 
 void Machine::updateKey(SpecKeys key, uint8_t state) {
@@ -65,7 +77,6 @@ void Machine::setup(models_enum model) {
 }
 
 void Machine::start(FILE *audioFile) {
-  Serial.println("Starting machine");
   this->audioFile = audioFile;
   isRunning = true;
   xTaskCreatePinnedToCore(runnerTask, "z80Runner", 8192, this, 5, NULL, 0);

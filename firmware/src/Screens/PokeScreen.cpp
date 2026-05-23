@@ -71,9 +71,9 @@ void PokeScreen::pressKey(SpecKeys key)
     m_navigationStack->pop();
     return;
   default:
-    if (specKeyToLetter.find(key) == specKeyToLetter.end() && key != SPECKEY_SPACE)
+    if (specKeyToLetterMap().find(key) == specKeyToLetterMap().end() && key != SPECKEY_SPACE)
       break;
-    char chr = (key==SPECKEY_SPACE) ? ' ' : specKeyToLetter.at(key);
+    char chr = (key==SPECKEY_SPACE) ? ' ' : specKeyToLetterMap().at(key);
     if (chr == 'X'){
       bool bad = false;
       if (active_control == 1){

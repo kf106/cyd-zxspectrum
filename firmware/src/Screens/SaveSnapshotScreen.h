@@ -66,9 +66,9 @@ public:
       return;
     default:
       // does the speckey map onto a letter - look in the mapping table
-      if (specKeyToLetter.find(key) != specKeyToLetter.end())
+      if (specKeyToLetterMap().find(key) != specKeyToLetterMap().end())
       {
-        char letter = specKeyToLetter.at(key);
+        char letter = specKeyToLetterMap().at(key);
         // only allow alphnum and not "."
         if (isalpha(letter) || isdigit(letter))
         {

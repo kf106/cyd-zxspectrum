@@ -29,6 +29,15 @@ const uint16_t specpal565[16] = {
     0x0000, 0x1B00, 0x00B8, 0x17B8, 0xE005, 0xF705, 0xE0BD, 0x18C6, 0x0000, 0x1F00, 0x00F8, 0x1FF8, 0xE007, 0xFF07, 0xE0FF, 0xFFFF
 };
 
+#ifdef SPECTRUM_48K_ONLY
+namespace Spectrum48KStorage {
+uint8_t romPage[0x4000];
+uint8_t bank0[0x4000];
+uint8_t bank2[0x4000];
+uint8_t bank5[0x4000];
+}
+#endif
+
 
 // Con estas variables se controla el mapeado de las teclas virtuales del spectrum a I/O port
 const int key2specy[2][41] = {
@@ -48,7 +57,9 @@ int oldkeys[16] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
 ZXSpectrum::ZXSpectrum()
 {
   z80Regs = (Z80Regs *)malloc(sizeof(Z80Regs));
-  z80Regs->userInfo = this;
+  if (z80Regs != nullptr) {
+    z80Regs->userInfo = this;
+  }
 }
 
 void ZXSpectrum::reset()

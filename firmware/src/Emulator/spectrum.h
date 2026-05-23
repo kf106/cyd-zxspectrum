@@ -58,40 +58,76 @@ typedef struct
   uint8_t SoundBits;
 } tipo_hwopt;
 
+// CYD has no PSRAM; heap cannot hold 10x16KB pages after display init.
+#ifdef SPECTRUM_48K_ONLY
+#define SPECTRUM_RAM_BANKS 8
+#define SPECTRUM_ROM_PAGES 1
+namespace Spectrum48KStorage {
+  extern uint8_t romPage[0x4000];
+  extern uint8_t bank0[0x4000];
+  extern uint8_t bank2[0x4000];
+  extern uint8_t bank5[0x4000];
+}
+#else
+#define SPECTRUM_RAM_BANKS 8
+#define SPECTRUM_ROM_PAGES 2
+#endif
+
 class MemoryPage {
 public:
   bool isDirty;
   uint8_t *data;
-  MemoryPage() {
-    isDirty = false;
-    data = (uint8_t *) malloc(0x4000);
-    memset(data, 0, 0x4000);
+  bool ownsData;
+
+  MemoryPage() : isDirty(false), data(nullptr), ownsData(true) {
+    data = (uint8_t *)malloc(0x4000);
+    if (data != nullptr) {
+      memset(data, 0, 0x4000);
+    }
   }
+
+  MemoryPage(uint8_t *staticData) : isDirty(false), data(staticData), ownsData(false) {
+    if (data != nullptr) {
+      memset(data, 0, 0x4000);
+    }
+  }
+
+  bool ok() const { return data != nullptr; }
 };
 
 class Memory {
   public:
     uint8_t hwBank = 0;
-    MemoryPage *rom[2] = {0};
-    MemoryPage *banks[8] = {0};
+    MemoryPage *rom[SPECTRUM_ROM_PAGES] = {0};
+    MemoryPage *banks[SPECTRUM_RAM_BANKS] = {0};
     // track is a memory bank is dirty
     MemoryPage *currentScreen;
     MemoryPage *mappedMemory[4];
     Memory() {
-      // allocate space for the rom
-      for (int i = 0; i < 2; i++) {
+#ifdef SPECTRUM_48K_ONLY
+      // 48K needs ROM + RAM banks 0, 2 and 5 only — use static storage (64KB BSS, no heap)
+      rom[0] = new MemoryPage(Spectrum48KStorage::romPage);
+      for (int i = 0; i < SPECTRUM_RAM_BANKS; i++) {
+        banks[i] = nullptr;
+      }
+      banks[0] = new MemoryPage(Spectrum48KStorage::bank0);
+      banks[2] = new MemoryPage(Spectrum48KStorage::bank2);
+      banks[5] = new MemoryPage(Spectrum48KStorage::bank5);
+      printf("48K spectrum memory: static ROM + banks 0,2,5\n");
+#else
+      for (int i = 0; i < SPECTRUM_ROM_PAGES; i++) {
         rom[i] = new MemoryPage();
-        if (rom[i] == nullptr || rom[i]->data == nullptr) {
-          printf("Failed to allocate ROM");
+        if (rom[i] == nullptr || !rom[i]->ok()) {
+          printf("Failed to allocate ROM page %d\n", i);
         }
       }
-      // allocate space for the memory banks
-      for (int i = 0; i < 8; i++) {
+      for (int i = 0; i < SPECTRUM_RAM_BANKS; i++) {
         banks[i] = new MemoryPage();
-        if (banks[i] == nullptr || banks[i]->data == nullptr) {
-          printf("Failed to allocate RAM");
+        if (banks[i] == nullptr || !banks[i]->ok()) {
+          printf("Failed to allocate RAM bank %d\n", i);
         }
       }
+#endif
       // wire up the default memory configuration - this will work for the 48k model and is the default for the 128k model
       mappedMemory[0] = rom[0];
       mappedMemory[1] = banks[5];
@@ -107,16 +143,33 @@ class Memory {
       }
       hwBank = newHwBank;
       // the lower 3 bits of the bank register determine which ram bank is paged in to the top 16K
-      mappedMemory[3] = banks[hwBank & 0x07];
+      {
+        MemoryPage *bank = banks[hwBank & 0x07];
+        mappedMemory[3] = (bank != nullptr && bank->ok()) ? bank : banks[0];
+      }
       // bit 3 controls the video page - but this is just for the ULA, the CPU always sees the same memory
+#if defined(SPECTRUM_48K_ONLY)
+      currentScreen = banks[5];
+#elif SPECTRUM_RAM_BANKS >= 8
       currentScreen = banks[hwBank & 0x08 ? 7 : 5];
+#else
+      currentScreen = banks[5];
+#endif
       // bit 4 of the bank register determines which rom bank is paged in
-      mappedMemory[0] = rom[hwBank & 0x10 ? 1 : 0];      
+#if SPECTRUM_ROM_PAGES >= 2
+      mappedMemory[0] = rom[hwBank & 0x10 ? 1 : 0];
+#else
+      mappedMemory[0] = rom[0];
+#endif
     }
     inline uint8_t peek(int address) {
       int memoryBank = address >> 14;
       int bankAddress = address & 0x3fff;
-      return mappedMemory[memoryBank]->data[bankAddress];
+      MemoryPage *page = mappedMemory[memoryBank];
+      if (page == nullptr || page->data == nullptr) {
+        return 0xff;
+      }
+      return page->data[bankAddress];
     }
     inline void poke(int address, uint8_t value) {
       int memoryBank = address >> 14;
@@ -124,8 +177,11 @@ class Memory {
       if (memoryBank == 0) {
         // ignore writes to rom
       } else {
-        mappedMemory[memoryBank]->data[bankAddress] = value;
-        mappedMemory[memoryBank]->isDirty = true;
+        MemoryPage *page = mappedMemory[memoryBank];
+        if (page != nullptr && page->data != nullptr) {
+          page->data[bankAddress] = value;
+          page->isDirty = true;
+        }
       }
     }
     void loadRom(const uint8_t *rom_data, int rom_len) {

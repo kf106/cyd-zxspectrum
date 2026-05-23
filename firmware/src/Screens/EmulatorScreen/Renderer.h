@@ -3,11 +3,13 @@
 #include <string.h>
 #include "../../TFT/Display.h"
 #include "../../Serial.h"
+#include "../../CydLayout.h"
 
 void displayTask(void *pvParameters);
 
 class HDMIDisplay;
 class AudioOutput;
+class CydTouchKeyboard;
 class Renderer {
 private:
     Display &m_tft;
@@ -33,18 +35,31 @@ private:
     uint16_t flashTimer = 0;
     const int screenWidth = TFT_WIDTH;
     const int screenHeight = TFT_HEIGHT;
+#if defined(CYD_EMULATOR_W) && defined(CYD_TOUCH_KEYBOARD)
+    const int emulatorOriginY = CYD_EMULATOR_Y;
+    const int emulatorWidth = CYD_EMULATOR_W;
+    const int emulatorHeight = CYD_EMULATOR_H;
+    const int spectrumOriginY = cydSpectrumOriginY();
+    int emulatorOriginX = cydEmulatorOriginX(false);
+    int spectrumOriginX = cydSpectrumOriginX(false);
+    int sideBorderLen = cydSpectrumSideBorder(false);
+    void drawCydBorders();
+#endif
+#if !defined(CYD_EMULATOR_W) || !defined(CYD_TOUCH_KEYBOARD)
     const int borderWidth = (screenWidth - 256) / 2;
     const int borderHeight = (screenHeight - 192) / 2;
-    // draw the borders
-    void drawBorder(int startPos, int endPos, int offset, int length, int drawWidth, int drawHeight, bool isSideBorders);
+    const int spectrumOriginX = borderWidth;
+    const int spectrumOriginY = borderHeight;
+#endif
+    void drawBorder(int startPos, int endPos, int offset, int sideBorderLen, int areaX, int areaW, bool isSideBorders);
     // draw the screen
     void drawScreen();
     // draw the spectrum screen
     void drawSpectrumScreen();
-    // draw the menu
+#ifndef CYD_NO_EMULATOR_MENU
     void drawMenu();
-    // draw the time travel screen
     void drawTimeTravel();
+#endif
     // display task - runs continuously and draws the screen
     // controlled bu the m_displaySemaphore
     friend void displayTask(void *pvParameters);
@@ -53,8 +68,13 @@ private:
     uint16_t loadProgress = 0;
     // should we be rendering
     bool isRunning = false;
+    volatile bool m_drawing = false;
     // keep track of how many frames we've drawn
     uint32_t frameCount = 0;
+#ifdef CYD_TOUCH_KEYBOARD
+    CydTouchKeyboard *m_cydTouchKeyboard = nullptr;
+    bool m_cydKeyboardOverlayEnabled = true;
+#endif
 public:
     Renderer(Display &tft, AudioOutput *audioOutput, HDMIDisplay *hdmiDisplay): m_tft(tft), m_audioOutput(audioOutput), m_HDMIDisplay(hdmiDisplay) {
       // enough for a row of 8 pixels
@@ -75,8 +95,8 @@ public:
       m_displaySemaphore = xSemaphoreCreateBinary();
     }
     void start() {
-      xTaskCreatePinnedToCore(displayTask, "displayTask", 8192, this, 1, NULL, 1);
       isRunning = true;
+      xTaskCreatePinnedToCore(displayTask, "displayTask", 8192, this, 1, NULL, 1);
     }
     ~Renderer() {
       free(pixelBuffer);
@@ -84,12 +104,13 @@ public:
       free(currentScreenBuffer);
     }
     void triggerDraw(const uint8_t *currentScreen, const uint8_t *borderColors) {
-      if (drawReady) {
-        drawReady = false;
-        memcpy(currentScreenBuffer, currentScreen, 6912);
-        memcpy(currentBorderColors, borderColors, 312);
-        xSemaphoreGive(m_displaySemaphore);
+      memcpy(currentScreenBuffer, currentScreen, 6912);
+      memcpy(currentBorderColors, borderColors, 312);
+      if (!isRunning || !drawReady) {
+        return;
       }
+      drawReady = false;
+      xSemaphoreGive(m_displaySemaphore);
     }
     void setIsLoading(bool loading) {
       isLoading = loading;
@@ -97,10 +118,16 @@ public:
     void pause() {
       isRunning = false;
     }
+    void waitForIdle();
     void resume() {
       isRunning = true;
       firstDraw = true;
     }
+#ifdef CYD_TOUCH_KEYBOARD
+    void setCydKeyboardOverlayEnabled(bool enabled) {
+      m_cydKeyboardOverlayEnabled = enabled;
+    }
+#endif
     uint32_t getFrameCount() {
       return frameCount;
     }
@@ -113,6 +140,19 @@ public:
     void setNeedsRedraw() {
       firstDraw = true;
     }
+#ifdef CYD_TOUCH_KEYBOARD
+    void setCydHandedness(bool rightHanded) {
+#if defined(CYD_EMULATOR_W)
+      emulatorOriginX = cydEmulatorOriginX(rightHanded);
+      sideBorderLen = cydSpectrumSideBorder(rightHanded);
+      spectrumOriginX = cydSpectrumOriginX(rightHanded);
+      setNeedsRedraw();
+#endif
+    }
+    void setCydTouchKeyboard(CydTouchKeyboard *keyboard) {
+      m_cydTouchKeyboard = keyboard;
+    }
+#endif
     void forceRedraw(const uint8_t *currentScreen = nullptr, const uint8_t *borderColors = nullptr) {
       if (currentScreen != nullptr) {
         memcpy(currentScreenBuffer, currentScreen, 6912);
@@ -123,6 +163,8 @@ public:
       firstDraw = true;
       drawScreen();
     }
+#ifndef CYD_NO_EMULATOR_MENU
     bool isShowingMenu = false;
     bool isShowingTimeTravel = false;
+#endif
 };

@@ -9,11 +9,21 @@
 #include "AlphabetPicker.h"
 #include "GameFilePickerScreen.h"
 #include "NavigationStack.h"
+#ifndef CYD_NO_EMULATOR_MENU
 #include "PokeScreen.h"
 #include "SaveSnapshotScreen.h"
+#endif
+#ifdef CYD_TOUCH_KEYBOARD
+#include "CydMenuScreen.h"
+#include "../Files/ISettings.h"
+#endif
 #include "EmulatorScreen/Renderer.h"
+#ifdef CYD_TOUCH_KEYBOARD
+#include "../Input/CydTouchKeyboard.h"
+#endif
 #include "EmulatorScreen/Machine.h"
 #include "EmulatorScreen/GameLoader.h"
+#include "fonts/GillSans_15_vlw.h"
 
 const std::vector<std::string> tap_extensions = {".tap", ".tzx"};
 const std::vector<std::string> no_sd_card_error = {"No SD Card", "Insert an SD Card", "to load games"};
@@ -21,7 +31,7 @@ const std::vector<std::string> no_files_error = {"No games found", "on the SD Ca
 
 void EmulatorScreen::triggerLoadTape()
 {
-  if (isLoading) {
+  if (isLoading || m_navigationStack == nullptr) {
     return;
   }
   machine->pause();
@@ -61,17 +71,46 @@ EmulatorScreen::EmulatorScreen(Display &tft, HDMIDisplay *hdmiDisplay, AudioOutp
   renderer = new Renderer(tft, audioOutput, hdmiDisplay);
   machine = new Machine(renderer, audioOutput, [&]()
                         {
-    Serial.println("ROM loading routine hit");
-    triggerLoadTape(); });
+#ifdef CYD_SKIP_AUTO_TAPE_LOADER
+#else
+    triggerLoadTape();
+#endif
+  });
   gameLoader = new GameLoader(machine, renderer, audioOutput);
+}
+
+bool EmulatorScreen::isMachineReady() const
+{
+  ZXSpectrum *speccy = machine != nullptr ? machine->getMachine() : nullptr;
+  return speccy != nullptr && speccy->z80Regs != nullptr && speccy->mem.banks[5] != nullptr &&
+         speccy->mem.banks[5]->ok() && speccy->mem.banks[2] != nullptr && speccy->mem.banks[2]->ok() &&
+         speccy->mem.banks[0] != nullptr && speccy->mem.banks[0]->ok() && speccy->mem.rom[0] != nullptr &&
+         speccy->mem.rom[0]->ok();
 }
 
 void EmulatorScreen::run(std::string filename, models_enum model)
 {
+  if (!isMachineReady())
+  {
+    m_tft.fillScreen(TFT_RED);
+    m_tft.loadFont(GillSans_15_vlw);
+    m_tft.setTextColor(TFT_WHITE, TFT_RED);
+    m_tft.drawCenterString("Out of memory", m_tft.height() / 2 - 20);
+    m_tft.drawCenterString("for 48K emulator", m_tft.height() / 2 + 10);
+    return;
+  }
   m_tft.fillScreen(TFT_BLACK);
   renderer->start();
   auto bl = BusyLight();
   machine->setup(model);
+  // Run a few frames synchronously and paint once so we are not stuck on the
+  // ILI9341 boot fill while the display task waits for the first triggerDraw.
+  ZXSpectrum *speccy = machine->getMachine();
+  for (int i = 0; i < 50; i++)
+  {
+    speccy->runForFrame(nullptr, nullptr);
+  }
+  renderer->forceRedraw(speccy->mem.currentScreen->data, speccy->borderColors);
   if (filename.size() > 0)
   {
     // check for tap or tpz files
@@ -94,6 +133,27 @@ void EmulatorScreen::run(std::string filename, models_enum model)
   machine->start(audioFile);
 }
 
+void EmulatorScreen::didAppear()
+{
+#ifdef CYD_TOUCH_KEYBOARD
+  if (renderer != nullptr)
+  {
+    renderer->setCydKeyboardOverlayEnabled(true);
+  }
+  if (m_cydTouchKeyboard != nullptr)
+  {
+    m_cydTouchKeyboard->invalidateOverlay();
+  }
+#endif
+  resume();
+#ifdef CYD_TOUCH_KEYBOARD
+  if (renderer != nullptr)
+  {
+    renderer->setNeedsRedraw();
+  }
+#endif
+}
+
 void EmulatorScreen::pause()
 {
   renderer->pause();
@@ -108,26 +168,55 @@ void EmulatorScreen::resume()
 
 void EmulatorScreen::updateKey(SpecKeys key, uint8_t state)
 {
-  // TODO audio capture
-  // if (key == SPECKEY_0)
-  // {
-  //   if (audioFile)
-  //   {
-  //     machine->pause();
-  //     vTaskDelay(1000 / portTICK_PERIOD_MS);
-  //     fclose(audioFile);
-  //     audioFile = NULL;
-  //     Serial.printf("Audio file closed\n");
-  //   }
-  // }
+#ifndef CYD_NO_EMULATOR_MENU
   if (!renderer->isShowingTimeTravel)
+#endif
   {
     machine->updateKey(key, state);
   }
 }
 
+void EmulatorScreen::willDisappear()
+{
+  pause();
+}
+
+void EmulatorScreen::loadGameFile(const char *path)
+{
+  if (path == nullptr || machine == nullptr)
+  {
+    return;
+  }
+  auto bl = BusyLight();
+  drawBusy();
+  std::string ext = path;
+  size_t dot = ext.find_last_of('.');
+  if (dot != std::string::npos)
+  {
+    ext = ext.substr(dot);
+    std::transform(ext.begin(), ext.end(), ext.begin(),
+                   [](unsigned char c) { return (char)std::tolower(c); });
+  }
+  if (ext == ".tap" || ext == ".tzx")
+  {
+    loadTape(path);
+    return;
+  }
+  Load(machine->getMachine(), path);
+  renderer->forceRedraw();
+}
+
 void EmulatorScreen::pressKey(SpecKeys key)
 {
+#ifdef CYD_TOUCH_KEYBOARD
+  if (key == SPECKEY_MENU)
+  {
+    m_menuRequested = true;
+    m_menuOpenDelay = 3;
+    return;
+  }
+#endif
+#ifndef CYD_NO_EMULATOR_MENU
   if (key == SPECKEY_MENU)
   {
     if (renderer->isShowingMenu) {
@@ -159,17 +248,19 @@ void EmulatorScreen::pressKey(SpecKeys key)
         renderer->forceRedraw();
       }
     }
-  } else if (renderer->isShowingMenu) 
+  } else if (renderer->isShowingMenu)
   {
+#ifdef CYD_NO_TIME_TRAVEL
+    if (key == SPECKEY_2) {
+#else
     if (key == SPECKEY_1) {
       renderer->isShowingMenu = false;
       renderer->isShowingTimeTravel = true;
       machine->startTimeTravel();
       renderer->forceRedraw();
-    }
-    else if (key == SPECKEY_2) {
+    } else if (key == SPECKEY_2) {
+#endif
       renderer->isShowingMenu = false;
-      // show the save snapshot UI
       m_navigationStack->push(new SaveSnapshotScreen(m_tft, m_hdmiDisplay, m_audioOutput, machine->getMachine(), m_files));
     } else if (key == SPECKEY_P) {
       renderer->isShowingMenu = false;
@@ -179,14 +270,61 @@ void EmulatorScreen::pressKey(SpecKeys key)
       machine->resume();
       renderer->forceRedraw();
     } else if (key == SPECKEY_5) {
-    m_audioOutput->volumeDown();
+      m_audioOutput->volumeDown();
       renderer->forceRedraw();
     } else if (key == SPECKEY_8) {
       m_audioOutput->volumeUp();
       renderer->forceRedraw();
     }
   }
+#else
+  (void)key;
+#endif
 }
+
+#ifdef CYD_TOUCH_KEYBOARD
+void EmulatorScreen::openMenuIfRequested()
+{
+  if (m_menuOpenDelay > 0)
+  {
+    m_menuOpenDelay--;
+    return;
+  }
+  if (!m_menuRequested)
+  {
+    return;
+  }
+  m_menuRequested = false;
+  pause();
+  renderer->setCydKeyboardOverlayEnabled(false);
+  renderer->waitForIdle();
+  m_navigationStack->push(new CydMenuScreen(
+      m_tft,
+      m_hdmiDisplay,
+      m_audioOutput,
+      m_files,
+      this,
+      machine,
+      m_cydSettings,
+      m_cydTouchKeyboard));
+}
+
+void EmulatorScreen::setCydHandedness(bool rightHanded)
+{
+  renderer->setCydHandedness(rightHanded);
+}
+
+void EmulatorScreen::setCydTouchKeyboard(CydTouchKeyboard *keyboard, ISettings *settings)
+{
+  m_cydTouchKeyboard = keyboard;
+  m_cydSettings = settings;
+  if (settings != nullptr)
+  {
+    renderer->setCydHandedness(settings->isCydRightHanded());
+  }
+  renderer->setCydTouchKeyboard(keyboard);
+}
+#endif
 
 void EmulatorScreen::loadTape(std::string filename)
 {

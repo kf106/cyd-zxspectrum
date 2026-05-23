@@ -1,9 +1,11 @@
 #include "Renderer.h"
+#ifdef CYD_TOUCH_KEYBOARD
+#include "../../Input/CydTouchKeyboard.h"
+#endif
 #include "../../TFT/HDMIDisplay.h"
 #include "../../Emulator/spectrum.h"
 #include "../fonts/GillSans_15_vlw.h"
 #include "../../AudioOutput/AudioOutput.h"
-
 static const int VOLUME_BAR_HEIGHT = 45;
 static const int MENU_BAR_HEIGHT = 20;
 
@@ -15,22 +17,66 @@ void displayTask(void *pvParameters) {
     {
       if (xSemaphoreTake(renderer->m_displaySemaphore, portMAX_DELAY))
       {
-        renderer->drawScreen();
+        if (renderer->isRunning)
+        {
+          renderer->drawScreen();
+        }
+        else
+        {
+          renderer->drawReady = true;
+        }
       }
     }
     else 
     {
       vTaskDelay(100 / portTICK_PERIOD_MS);
     }
-    // if (renderer->isRunning && digitalRead(0) == LOW)
-    // {
-    //   renderer->pause();
-    //   renderer->showSaveSnapshotScreen();
-    // }
   }
 }
 
-void Renderer::drawBorder(int startPos, int endPos, int offset, int length, int drawWidth, int drawHeight, bool isSideBorders)
+void Renderer::waitForIdle()
+{
+  while (m_drawing)
+  {
+    vTaskDelay(1 / portTICK_PERIOD_MS);
+  }
+  m_tft.dmaWait();
+  while (xSemaphoreTake(m_displaySemaphore, 0) == pdTRUE)
+  {
+    drawReady = true;
+  }
+}
+
+void Renderer::drawScreen()
+{
+  m_drawing = true;
+  if (m_HDMIDisplay) {
+    m_tft.dmaWait();
+    m_HDMIDisplay->sendSpectrum(currentScreenBuffer, currentBorderColors);
+  }
+  drawSpectrumScreen();
+#ifdef CYD_TOUCH_KEYBOARD
+  if (m_cydTouchKeyboard != nullptr && m_cydKeyboardOverlayEnabled)
+  {
+    m_tft.startWrite();
+    m_cydTouchKeyboard->drawOverlayIfNeeded(m_tft);
+    m_tft.endWrite();
+  }
+#endif
+#ifndef CYD_NO_EMULATOR_MENU
+  m_tft.startWrite();
+  m_tft.dmaWait();
+  if (isShowingMenu) {
+    drawMenu();
+  } else if (isShowingTimeTravel) {
+    drawTimeTravel();
+  }
+  m_tft.endWrite();
+#endif
+  m_drawing = false;
+}
+
+void Renderer::drawBorder(int startPos, int endPos, int offset, int sideBorderLen, int areaX, int areaW, bool isSideBorders)
 {
   for (int borderPos = startPos; borderPos < endPos;)
   {
@@ -52,14 +98,21 @@ void Renderer::drawBorder(int startPos, int endPos, int offset, int length, int 
 
       if (isSideBorders)
       {
-        // Draw left and right borders
-        m_tft.fillRect(0, rangeStart, length, rangeLength, tftColor);                  // Left side
-        m_tft.fillRect(drawWidth - length, rangeStart, length, rangeLength, tftColor); // Right side
+#ifdef CYD_TOUCH_KEYBOARD
+        CydTouchKeyboard::fillRectAvoidingKeys(m_tft, areaX, rangeStart, sideBorderLen, rangeLength, tftColor);
+        CydTouchKeyboard::fillRectAvoidingKeys(m_tft, areaX + areaW - sideBorderLen, rangeStart, sideBorderLen, rangeLength, tftColor);
+#else
+        m_tft.fillRect(areaX, rangeStart, sideBorderLen, rangeLength, tftColor);
+        m_tft.fillRect(areaX + areaW - sideBorderLen, rangeStart, sideBorderLen, rangeLength, tftColor);
+#endif
       }
       else
       {
-        // Draw top or bottom borders
-        m_tft.fillRect(0, rangeStart, drawWidth, rangeLength, tftColor);
+#ifdef CYD_TOUCH_KEYBOARD
+        CydTouchKeyboard::fillRectAvoidingKeys(m_tft, areaX, rangeStart, areaW, rangeLength, tftColor);
+#else
+        m_tft.fillRect(areaX, rangeStart, areaW, rangeLength, tftColor);
+#endif
       }
     }
     else
@@ -69,46 +122,79 @@ void Renderer::drawBorder(int startPos, int endPos, int offset, int length, int 
   }
 }
 
-void Renderer::drawScreen()
+#if defined(CYD_EMULATOR_W) && defined(CYD_TOUCH_KEYBOARD)
+static uint16_t cydBorder565(const uint8_t *borderColors, int index)
 {
-  if (m_HDMIDisplay) {
-    m_tft.dmaWait();
-    m_HDMIDisplay->sendSpectrum(currentScreenBuffer, currentBorderColors);
-  }
-  drawSpectrumScreen();
-  m_tft.startWrite();
-  m_tft.dmaWait();
-  if (isShowingMenu) {
-    drawMenu();
-  } else if (isShowingTimeTravel) {
-    drawTimeTravel();
-  }
-  m_tft.endWrite();
+  uint16_t tftColor = specpal565[borderColors[index] & 7];
+  return (tftColor >> 8) | (tftColor << 8);
 }
 
+void Renderer::drawCydBorders()
+{
+  const int commandRowY = spectrumOriginY + CYD_SPECTRUM_H;
+
+  for (int y = 0; y < CYD_SPECTRUM_BORDER_TOP; y++)
+  {
+    int idx = (y * 48) / CYD_SPECTRUM_BORDER_TOP;
+    uint16_t color = cydBorder565(currentBorderColors, idx);
+    CydTouchKeyboard::fillRectAvoidingKeys(m_tft, emulatorOriginX, emulatorOriginY + y, emulatorWidth, 1, color);
+  }
+
+  for (int row = 0; row < CYD_SPECTRUM_H; row++)
+  {
+    int screenY = spectrumOriginY + row;
+    uint16_t color = cydBorder565(currentBorderColors, 64 + row);
+    CydTouchKeyboard::fillRectAvoidingKeys(m_tft, emulatorOriginX, screenY, sideBorderLen, 1, color);
+    CydTouchKeyboard::fillRectAvoidingKeys(m_tft, emulatorOriginX + emulatorWidth - sideBorderLen, screenY, sideBorderLen, 1, color);
+  }
+
+  for (int y = 0; y < CYD_SPECTRUM_BORDER_BOTTOM; y++)
+  {
+    int screenY = commandRowY + y;
+    int idx = 256 + (y * 48) / CYD_SPECTRUM_BORDER_BOTTOM;
+    uint16_t color = cydBorder565(currentBorderColors, idx);
+    CydTouchKeyboard::fillRectAvoidingKeys(m_tft, emulatorOriginX, screenY, emulatorWidth, 1, color);
+  }
+}
+#endif
+
 void Renderer::drawSpectrumScreen() {
+#if defined(CYD_EMULATOR_W) && defined(CYD_TOUCH_KEYBOARD)
   if (isLoading)
   {
-    int position = loadProgress * screenWidth / 100;
+    int position = loadProgress * 256 / 100;
+    const int commandRowY = spectrumOriginY + CYD_SPECTRUM_H;
+    m_tft.fillRect(spectrumOriginX + position, commandRowY, 256 - position, CYD_COMMAND_ROW_H, TFT_BLACK);
+    m_tft.fillRect(spectrumOriginX, commandRowY, position, CYD_COMMAND_ROW_H, TFT_GREEN);
+  }
+  drawCydBorders();
+#else
+  if (isLoading)
+  {
+    int position = loadProgress * 256 / 100;
     m_tft.fillRect(position, 0, screenWidth - position, 8, TFT_BLACK);
     m_tft.fillRect(0, 0, position, 8, TFT_GREEN);
   }
-  int borderOffset = 36;
 
-  int borderHeightSkip = (isShowingMenu | isShowingTimeTravel) ? MENU_BAR_HEIGHT : isLoading ? 8 : 0;
-
-  // Draw the top border
-  drawBorder(borderHeightSkip, borderHeight, borderOffset, screenWidth, screenWidth, borderHeight, false);
-
-  // Draw the bottom border - unless we are showing the menu which includes the bottom volume bar
-  if (!isShowingMenu) {
-    drawBorder(screenHeight - borderHeight, screenHeight, borderOffset, screenWidth, screenWidth, borderHeight, false);
+  const int borderOffset = 36;
+  int borderHeightSkip = isLoading ? 8 : 0;
+#ifndef CYD_NO_EMULATOR_MENU
+  if (isShowingMenu | isShowingTimeTravel) {
+    borderHeightSkip = MENU_BAR_HEIGHT;
   }
-
-  int bottomBorderSkip = isShowingMenu ? VOLUME_BAR_HEIGHT : 0;
-
-  // Draw the left and right borders
-  drawBorder(borderHeightSkip, screenHeight - borderHeight - bottomBorderSkip, borderOffset, borderWidth, screenWidth, borderHeight, true);
+#endif
+  drawBorder(borderHeightSkip, borderHeight, borderOffset, borderWidth, 0, screenWidth, false);
+  int bottomBorderSkip = 0;
+#ifndef CYD_NO_EMULATOR_MENU
+  if (!isShowingMenu) {
+    drawBorder(screenHeight - borderHeight, screenHeight, borderOffset, borderWidth, 0, screenWidth, false);
+  }
+  bottomBorderSkip = isShowingMenu ? VOLUME_BAR_HEIGHT : 0;
+#else
+  drawBorder(screenHeight - borderHeight, screenHeight, borderOffset, borderWidth, 0, screenWidth, false);
+#endif
+  drawBorder(borderHeightSkip, screenHeight - borderHeight - bottomBorderSkip, borderOffset, borderWidth, 0, screenWidth, true);
+#endif
   // do the pixels
   uint8_t *attrBase = currentScreenBuffer + 0x1800;
   uint8_t *pixelBase = currentScreenBuffer;
@@ -146,10 +232,10 @@ void Renderer::drawSpectrumScreen() {
       uint16_t tftInkColor = specpal565[inkColor];
       uint16_t tftPaperColor = specpal565[paperColor];
       const uint32_t u32Lookup[4] = {
-        tftPaperColor | (tftPaperColor << 16), // 00
-        tftPaperColor | (tftInkColor << 16), // 01
-        tftInkColor | (tftPaperColor << 16), // 10
-        tftInkColor | (tftInkColor << 16) // 11
+        static_cast<uint32_t>(tftPaperColor) | (static_cast<uint32_t>(tftPaperColor) << 16), // 00
+        static_cast<uint32_t>(tftPaperColor) | (static_cast<uint32_t>(tftInkColor) << 16),   // 01
+        static_cast<uint32_t>(tftInkColor) | (static_cast<uint32_t>(tftPaperColor) << 16),   // 10
+        static_cast<uint32_t>(tftInkColor) | (static_cast<uint32_t>(tftInkColor) << 16)      // 11
       };
       for (int y = 0; y < 8; y++)
       {
@@ -196,10 +282,8 @@ void Renderer::drawSpectrumScreen() {
     }
     if (dirty || firstDraw)
     {
-      if (!isShowingMenu || borderHeight + attrY * 8 < m_tft.height() - VOLUME_BAR_HEIGHT) { 
-        m_tft.setWindow(borderWidth, borderHeight + attrY * 8, borderWidth + 255, borderHeight + attrY * 8 + 7);
-        m_tft.pushPixels(pixelBuffer, 256 * 8);
-      }
+      m_tft.setWindow(spectrumOriginX, spectrumOriginY + attrY * 8, spectrumOriginX + 255, spectrumOriginY + attrY * 8 + 7);
+      m_tft.pushPixels(pixelBuffer, 256 * 8);
     }
   }
   drawReady = true;
@@ -213,6 +297,7 @@ void Renderer::drawSpectrumScreen() {
 
 }
 
+#ifndef CYD_NO_EMULATOR_MENU
 void Renderer::drawTimeTravel() {
     m_tft.fillRect(0, 0, m_tft.width(), 20, TFT_BLACK);
 
@@ -239,9 +324,14 @@ void Renderer::drawMenu() {
     m_tft.loadFont(GillSans_15_vlw);
     m_tft.setTextColor(TFT_WHITE, TFT_BLACK);
     
-    Point menuSize = m_tft.measureString("1-Time Travel  2-Snapshot  ENTER-Resume");
+#ifdef CYD_NO_TIME_TRAVEL
+    const char *menuLine = "2-Snapshot  P-Poke  ENTER-Resume";
+#else
+    const char *menuLine = "1-Time Travel  2-Snapshot  ENTER-Resume";
+#endif
+    Point menuSize = m_tft.measureString(menuLine);
     int centerX = (m_tft.width() - menuSize.x) / 2;
-    m_tft.drawString("1-Time Travel  2-Snapshot  ENTER-Resume", centerX, 0);
+    m_tft.drawString(menuLine, centerX, 0);
 
     // Draw the volume control
     const char *volumeText = "<5       Volume       8>";
@@ -261,3 +351,4 @@ void Renderer::drawMenu() {
     int currentVolumeWidth = volumeRectWidth * m_audioOutput->getVolume() / 10;
     m_tft.fillRect(volumeRectX, volumeRectY, currentVolumeWidth, volumeRectHeight, TFT_GREEN);
 }
+#endif

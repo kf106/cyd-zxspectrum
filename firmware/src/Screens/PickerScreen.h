@@ -98,10 +98,10 @@ public:
     if (!isHandled)
     {
       // does the speckey map onto a letter - look in the mapping table
-      if (specKeyToLetter.find(key) != specKeyToLetter.end())
+      if (specKeyToLetterMap().find(key) != specKeyToLetterMap().end())
       {
         playKeyClick();
-        char letter = specKeyToLetter.at(key);
+        char letter = specKeyToLetterMap().at(key);
         if (millis() - lastSearchPrefix > 500)
         {
           searchPrefix = "";

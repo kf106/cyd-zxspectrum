@@ -8,6 +8,7 @@
 #include "Renderer.h"
 #include "../../Emulator/spectrum.h"
 #include "../../Serial.h"
+#include <esp_heap_caps.h>
 
 void runnerTask(void *pvParameter);
 
@@ -53,40 +54,70 @@ private:
   }
 public:
   TimeTravel() {
-    // allocate some memory banks
+#if defined(CYD_NO_EMULATOR_MENU) || defined(CYD_NO_TIME_TRAVEL)
+    Serial.println("Time travel disabled (insufficient RAM on this build)");
+#else
+    // allocate some memory banks (~3.75MB pool for 30s rewind at 50fps)
     for (int i = 0; i < 240; i++) {
       MemoryBank *memoryBank = new MemoryBank();
       if (!memoryBank) {
         Serial.println("Could not allocate memory bank");
         return;
       }
-      memoryBank->data = (uint8_t *) ps_malloc(0x4000);
+      memoryBank->data = (uint8_t *)heap_caps_malloc(0x4000, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
       if (!memoryBank->data) {
         Serial.println("Could not allocate memory bank data");
+        delete memoryBank;
         return;
       }
       memoryBanks.push_back(memoryBank);
     }
+#endif
+  }
+  bool isEnabled() {
+#if defined(CYD_NO_EMULATOR_MENU) || defined(CYD_NO_TIME_TRAVEL)
+    return false;
+#else
+    return !memoryBanks.empty();
+#endif
   }
   size_t size() {
     return timeTravelInstants.size();
   }
   // record the current state of the machine
   bool record(ZXSpectrum *machine) {
+    if (!isEnabled()) {
+      return false;
+    }
     // how many memory banks do we need?
     int memoryBankCount = 0;
-    for(int i = 0; i<8; i++) {
+    for(int i = 0; i < SPECTRUM_RAM_BANKS; i++) {
+      if (machine->mem.banks[i] == nullptr) {
+        continue;
+      }
       if (machine->mem.banks[i]->isDirty) {
         memoryBankCount++;
       }
     }
-    ensureMemoryBanks(memoryBankCount);
+    if (memoryBankCount == 0) {
+      return true;
+    }
+    if (!ensureMemoryBanks(memoryBankCount)) {
+      Serial.println("Time travel: not enough snapshot RAM");
+      return false;
+    }
     Serial.printf("Saving %d memory banks\n", memoryBankCount);
     // create a new time travel instant
     TimeTravelInstant *instant = new TimeTravelInstant();
     // copy the memory banks
-    for(int i = 0; i<8; i++) {
+    for(int i = 0; i < SPECTRUM_RAM_BANKS; i++) {
+      if (machine->mem.banks[i] == nullptr) {
+        continue;
+      }
       if (machine->mem.banks[i]->isDirty) {
+        if (memoryBanks.empty()) {
+          break;
+        }
         MemoryBank *memoryBank = memoryBanks.front();
         memoryBanks.pop_front();
         memoryBank->index = i;
@@ -159,10 +190,10 @@ class Machine {
     FILE *audioFile = nullptr;
     // keeps track of how many tstates we've run
     uint32_t cycleCount = 0;
-    // time travel
-    TimeTravel *timeTravel;
-    // current time travel position
+#ifndef CYD_NO_EMULATOR_MENU
+    TimeTravel *timeTravel = nullptr;
     int timeTravelPosition = 0;
+#endif
     // callback for when rom loading routine is hit
     std::function<void()> romLoadingRoutineHitCallback;
   public:
@@ -176,8 +207,11 @@ class Machine {
     void resume() {
       isRunning = true;
     }
+#ifndef CYD_NO_EMULATOR_MENU
     void startTimeTravel() {
-      // record the current state
+      if (!timeTravel->isEnabled()) {
+        return;
+      }
       timeTravel->record(machine);
       timeTravelPosition = timeTravel->size() - 1;
       Serial.printf("Starting time travel %d\n", timeTravelPosition);
@@ -201,6 +235,7 @@ class Machine {
     void stopTimeTravel() {
       timeTravel->reset(timeTravelPosition);
     }
+#endif
     ZXSpectrum *getMachine() {
       return machine;
     }

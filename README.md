@@ -37,6 +37,8 @@ The LilyGo T-Deck has a keyboard, but the firmware for the keyboard is pretty te
 
 The CYD has no keyboard, but you should be able to hook up I2C devices to it.
 
+On first boot, the firmware runs a four-corner touch calibration (XPT2046 bit-bang on dedicated GPIOs, with the same plate-ADC corner mapping as [cyd-lords-of-midnight](https://github.com/atomic14/cyd-lords-of-midnight)) and asks for left- or right-handed keyboard layout. Values are stored in LittleFS (`settings.json`) and **are not erased when you upload new firmware**. To run calibration again, use **Erase Flash** in PlatformIO (or `pio run -t erase` then upload), or set `"cydSetupComplete": false` in `settings.json` on the device.
+
 Alternatively, you can use some python code in the `keyboard-server` directory to use your desktop keyboard to type. This has only been tested on a Mac - I've no idea if it will work on Windows.
 
 ```sh
