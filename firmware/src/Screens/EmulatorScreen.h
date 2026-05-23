@@ -2,6 +2,7 @@
 
 #include <string>
 #include "Screen.h"
+#include "../BootLog.h"
 
 class Display;
 class AudioOutput;
@@ -22,6 +23,7 @@ class EmulatorScreen : public Screen
     FILE *audioFile = nullptr;
     void triggerLoadTape();
     bool isLoading = false;
+    bool isMachineReady() const;
   public:
     EmulatorScreen(Display &tft, HDMIDisplay *hdmiDisplay, AudioOutput *audioOutput, IFiles *files);
     void updateKey(SpecKeys key, uint8_t state);
@@ -30,6 +32,7 @@ class EmulatorScreen : public Screen
     void pause();
     void resume();
     void didAppear() {
+      bootLog("emu", "didAppear — resume renderer/machine");
       resume();
     }
     void loadTape(std::string filename);

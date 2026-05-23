@@ -27,7 +27,7 @@
 #include "Files/Files.h"
 #include "Files/Settings.h"
 #include "Screens/NavigationStack.h"
-#include "Screens/MainMenuScreen.h"
+#include "Screens/EmulatorScreen.h"
 #include "Input/SerialKeyboard.h"
 #include "Input/Nunchuck.h"
 #include "Input/AdafruitSeeSaw.h"
@@ -51,6 +51,8 @@
 #include "SerialInterface/Messages/DeleteFile.h"
 #include "SerialInterface/Messages/MakeDirectory.h"
 #include "SerialInterface/Messages/RenameFile.h"
+#include "BootLog.h"
+#include <esp_system.h>
 
 void SerialInterfaceTask(void *arg) {
   PacketHandler *packetHandler = (PacketHandler *) arg;
@@ -67,22 +69,22 @@ void setup(void)
   digitalWrite(BOARD_POWERON, HIGH);
   #endif
   Serial.begin(115200);
-  // for(int i = 0; i < 5; i++) {
-  //   BusyLight bl;
-  //   vTaskDelay(pdMS_TO_TICKS(1000));
-  //   Serial.println("Booting...");
-  // }
-  // print out avialable ram
-  Serial.printf("Free heap: %d\n", ESP.getFreeHeap());
-  Serial.printf("Free PSRAM: %d\n", ESP.getFreePsram());
+#ifdef BOOT_DEBUG
+  delay(1500); // allow USB-serial to connect after reset
+#endif
+  bootLogResetReason();
+  bootLog("main", "Serial started");
+  bootLogf("main", "Free heap=%u PSRAM=%u", ESP.getFreeHeap(), ESP.getFreePsram());
   #ifdef POWER_PIN
   pinMode(POWER_PIN, OUTPUT);
   digitalWrite(POWER_PIN, POWER_PIN_ON);
   vTaskDelay(100);
   #endif
-  Serial.println("Starting up");
+#ifdef HARDWARE_VERSION_STRING
+  bootLogf("main", "board=%s", HARDWARE_VERSION_STRING);
+#endif
   #ifdef TFT_MOSI
-  Serial.println("Starting up SPI");
+  bootLog("main", "init SPI bus for TFT");
   // Initialize SPI
   spi_bus_config_t buscfg = {
       .mosi_io_num = TFT_MOSI,
@@ -100,11 +102,12 @@ void setup(void)
       .intr_flags = 0,
   };
   ESP_ERROR_CHECK(spi_bus_initialize(SPI2_HOST, &buscfg, SPI_DMA_CH_AUTO));
-  Serial.println("SPI initialized");
+  bootLog("main", "SPI bus ready");
   #endif
   // Files
   SDCard *sdFileSystem = nullptr;
   #ifdef USE_SDCARD
+  bootLog("main", "init SD card");
     #ifdef USE_SDIO
       sdFileSystem = new SDCard(SDCard::DEFAULT_MOUNT_POINT, SD_CARD_CLK, SD_CARD_CMD, SD_CARD_D0, SD_CARD_D1, SD_CARD_D2, SD_CARD_D3);
       // TODO setupUSB(fileSystem);
@@ -116,7 +119,9 @@ void setup(void)
         sdFileSystem = new SDCard(SDCard::DEFAULT_MOUNT_POINT, SD_CARD_CS);
       #endif
     #endif
+  bootLog("main", "SD card ctor done");
   #endif
+  bootLog("main", "init LittleFS");
   FilesImplementation<SDCard> *sdFiles = new FilesImplementation<SDCard>(sdFileSystem);
   FlashLittleFS *spiffsFileSystem = new FlashLittleFS(FlashLittleFS::DEFAULT_MOUNT_POINT);
   FilesImplementation<FlashLittleFS> *spiffsFiles = new FilesImplementation<FlashLittleFS>(spiffsFileSystem);
@@ -124,12 +129,16 @@ void setup(void)
   IFiles *files = new UnifiedStorage(spiffsFiles, sdFiles);
   
   ISettings *settings = new Settings(spiffsFiles);
+  bootLog("main", "storage ready");
 
   #ifdef TFT_ST7789
+  bootLog("main", "create ST7789 display");
   Display *tft = new ST7789(TFT_CS, TFT_DC, TFT_RST, TFT_BL, TFT_WIDTH, TFT_HEIGHT);
   #endif
   #ifdef TFT_ILI9341
+  bootLog("main", "create ILI9341 display");
   Display *tft = new ILI9341(TFT_CS, TFT_DC, TFT_RST, TFT_BL, TFT_WIDTH, TFT_HEIGHT);
+  bootLog("main", "display driver constructed");
   #endif
   HDMIDisplay *hdmiDisplay = nullptr; // new HDMIDisplay(GPIO_NUM_7);
   // navigation stack
@@ -140,6 +149,7 @@ void setup(void)
   audioOutput = new DACOutput(I2S_NUM_0, settings);
 #endif
 #ifdef BUZZER_GPIO_NUM
+  bootLog("main", "create buzzer audio");
   audioOutput = new BuzzerOutput(BUZZER_GPIO_NUM, settings);
 #endif
 #ifdef PDM_GPIO_NUM
@@ -191,6 +201,7 @@ void setup(void)
   tDeckKeyboard->start();
 #endif
   if (audioOutput) {
+    bootLog("main", "start audio");
     audioOutput->start(15625);
   }
   // create the directory structure
@@ -198,8 +209,13 @@ void setup(void)
   {
     Serial.println("Failed to create /snapshots directory");
   }
-  MainMenuScreen menuPicker(*tft, hdmiDisplay, audioOutput, files);
-  navigationStack->push(&menuPicker);
+  bootLog("main", "create EmulatorScreen");
+  EmulatorScreen *emulatorScreen = new EmulatorScreen(*tft, hdmiDisplay, audioOutput, files);
+  bootLog("main", "push EmulatorScreen on nav stack");
+  navigationStack->push(emulatorScreen);
+  bootLog("main", "EmulatorScreen::run (48K)");
+  emulatorScreen->run("", models_enum::SPECMDL_48K);
+  bootLog("main", "EmulatorScreen::run returned — entering main loop");
   // start off the keyboard and feed keys into the active scene
   // SerialKeyboard *keyboard = new SerialKeyboard([&](SpecKeys key, bool down)
   //                                               { navigationStack->updateKey(key, down); if (down) { navigationStack->pressKey(key); } });
@@ -242,7 +258,7 @@ void setup(void)
     1
   );
 
-  Serial.println("Running on core: " + String(xPortGetCoreID()));
+  bootLogf("main", "setup complete, core=%d", xPortGetCoreID());
   // use the boot pin to open the emulator menu
   pinMode(0, INPUT_PULLUP);
   // just keep running

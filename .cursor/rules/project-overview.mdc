@@ -3,9 +3,9 @@ description:
 globs:
 alwaysApply: false
 ---
-# ESP32 Rainbow - ZX Spectrum Emulator
+# CYD - ZX Spectrum Emulator
 
-This is a ZX Spectrum emulator for ESP32 boards, particularly the ESP32 Rainbow project. The codebase is organized as follows:
+This is a ZX Spectrum emulator for ESP32 boards configured for the CYD, with a touch-screen keyboard:
 
 - [firmware/](mdc:firmware/) - Contains the main ESP32 firmware code
   - [firmware/src/main.cpp](mdc:firmware/src/main.cpp) - Main entry point for the firmware
@@ -16,7 +16,4 @@ This is a ZX Spectrum emulator for ESP32 boards, particularly the ESP32 Rainbow 
 - [desktop/](mdc:desktop/) - Desktop emulation applications
 
 ## Supported Hardware
-- ESP32 Rainbow
 - Cheap Yellow Display (CYD)
-- LilyGo T-Deck
-- Other ESP32 boards with appropriate display and sound output

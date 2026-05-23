@@ -6,6 +6,7 @@
 #include "esp_vfs_fat.h"
 #include "sdmmc_cmd.h"
 #include "SDCard.h"
+#include "../BootLog.h"
 #include "ff.h"      // FatFS header for f_getfree
 #include "diskio.h"  // FatFS disk I/O
 
@@ -133,7 +134,7 @@ SDCard::SDCard(const char *mountPoint, gpio_num_t miso, gpio_num_t mosi, gpio_nu
       .max_files = 5,
       .allocation_unit_size = 16 * 1024};
 
-  Serial.println("Initializing SD card");
+  bootLog("sd", "SD SPI mount begin");
 
   spi_bus_config_t bus_cfg = {
       .mosi_io_num = mosi,
@@ -148,7 +149,7 @@ SDCard::SDCard(const char *mountPoint, gpio_num_t miso, gpio_num_t mosi, gpio_nu
   ret = spi_bus_initialize(spi_host_device_t(m_host.slot), &bus_cfg, SPI_DMA_CHAN);
   if (ret != ESP_OK)
   {
-    Serial.println("Failed to initialize bus.");
+    bootLogf("sd", "SPI bus init failed: %s", esp_err_to_name(ret));
     return;
   }
 
@@ -161,21 +162,10 @@ SDCard::SDCard(const char *mountPoint, gpio_num_t miso, gpio_num_t mosi, gpio_nu
   ret = esp_vfs_fat_sdspi_mount(mountPoint, &m_host, &slot_config, &mount_config, &m_card);
   if (ret != ESP_OK)
   {
-    if (ret == ESP_FAIL)
-    {
-      Serial.println("Failed to mount filesystem. "
-                    "If you want the card to be formatted, set the EXAMPLE_FORMAT_IF_MOUNT_FAILED menuconfig option.");
-    }
-    else
-    {
-      Serial.printf("Failed to initialize the card (%s). "
-                    "Make sure SD card lines have pull-up resistors in place.\n",
-               esp_err_to_name(ret));
-    }
+    bootLogf("sd", "mount failed: %s (no card is OK)", esp_err_to_name(ret));
     return;
   }
-  Serial.printf("SDCard mounted at: %s\n", mountPoint);
-  // Card has been initialized, print its properties
+  bootLogf("sd", "mounted at %s", mountPoint);
   sdmmc_card_print_info(stdout, m_card);
   _isMounted = true;
 
@@ -195,18 +185,14 @@ SDCard::~SDCard()
 
 bool SDCard::writeSectors(uint8_t *src, size_t start_sector, size_t sector_count) {
   xSemaphoreTake(m_mutex, portMAX_DELAY);
-  digitalWrite(GPIO_NUM_2, HIGH);
   esp_err_t res = sdmmc_write_sectors(m_card, src, start_sector, sector_count);
-  digitalWrite(GPIO_NUM_2, LOW);
   xSemaphoreGive(m_mutex);
   return res == ESP_OK;
 }
 
 bool SDCard::readSectors(uint8_t *dst, size_t start_sector, size_t sector_count) {
   xSemaphoreTake(m_mutex, portMAX_DELAY);
-  digitalWrite(GPIO_NUM_2, HIGH);
   esp_err_t res = sdmmc_read_sectors(m_card, dst, start_sector, sector_count);
-  digitalWrite(GPIO_NUM_2, LOW);
   xSemaphoreGive(m_mutex);
   return res == ESP_OK;
 }

@@ -1,6 +1,7 @@
 #include "./Machine.h"
 #include "./Renderer.h"
 #include "../../AudioOutput/AudioOutput.h"
+#include "../../BootLog.h"
 
 void runnerTask(void *pvParameter)
 {
@@ -10,12 +11,20 @@ void runnerTask(void *pvParameter)
 
 void Machine::runEmulator() {
   unsigned long lastTime = millis();
+  bool romLoadCallbackFired = false;
+  uint32_t frameNum = 0;
+  bootLog("z80", "emulator task running");
   while (1)
   {
     if (isRunning)
     {
       cycleCount += machine->runForFrame(audioOutput, audioFile);
       renderer->triggerDraw(machine->mem.currentScreen->data, machine->borderColors);
+      if (frameNum < 5)
+      {
+        bootLogf("z80", "frame %lu drawn", frameNum);
+      }
+      frameNum++;
       unsigned long currentTime = millis();
       unsigned long elapsed = currentTime - lastTime;
       if (elapsed > 1000)
@@ -26,14 +35,25 @@ void Machine::runEmulator() {
         Serial.printf("Executed at %.3FMHz cycles, frame rate=%.2f\n", cycles, fps);
         renderer->resetFrameCount();
         cycleCount = 0;
-        // save the state of the machine for time travel
-        timeTravel->record(machine);
+        // save the state of the machine for time travel (disabled on CYD)
+        if (timeTravel->isEnabled()) {
+          timeTravel->record(machine);
+        }
         Serial.printf("Free heap: %d\n", ESP.getFreeHeap());
         Serial.printf("Free PSRAM: %d\n", ESP.getFreePsram());
       }
       if (machine->romLoadingRoutineHit)
       {
-        romLoadingRoutineHitCallback();
+        if (!romLoadCallbackFired)
+        {
+          romLoadCallbackFired = true;
+          bootLog("z80", "ROM loader entered — firing callback");
+          romLoadingRoutineHitCallback();
+        }
+      }
+      else
+      {
+        romLoadCallbackFired = false;
       }
     }
     else
@@ -46,8 +66,17 @@ void Machine::runEmulator() {
 
 Machine::Machine(Renderer *renderer, AudioOutput *audioOutput, std::function<void()> romLoadingRoutineHitCallback)
 : renderer(renderer), audioOutput(audioOutput), romLoadingRoutineHitCallback(romLoadingRoutineHitCallback) {
-  Serial.println("Creating machine");
+  bootLog("z80", "Machine ctor: allocate ZXSpectrum");
   machine = new ZXSpectrum();
+  if (machine == nullptr || machine->z80Regs == nullptr || machine->mem.banks[5] == nullptr ||
+      !machine->mem.banks[5]->ok())
+  {
+    bootLog("z80", "FATAL: ZXSpectrum memory not ready");
+  }
+  else
+  {
+    bootLogf("z80", "ZXSpectrum OK static RAM (heap=%u)", ESP.getFreeHeap());
+  }
   timeTravel = new TimeTravel();
 }
 
@@ -65,10 +94,11 @@ void Machine::setup(models_enum model) {
 }
 
 void Machine::start(FILE *audioFile) {
-  Serial.println("Starting machine");
+  bootLog("z80", "Machine::start — creating runner task");
   this->audioFile = audioFile;
   isRunning = true;
-  xTaskCreatePinnedToCore(runnerTask, "z80Runner", 8192, this, 5, NULL, 0);
+  BaseType_t ok = xTaskCreatePinnedToCore(runnerTask, "z80Runner", 8192, this, 5, NULL, 0);
+  bootLogf("z80", "runner task create %s", ok == pdPASS ? "OK" : "FAILED");
 }
 
 void Machine::tapKey(SpecKeys key)

@@ -3,19 +3,27 @@
 #include "../../Emulator/spectrum.h"
 #include "../fonts/GillSans_15_vlw.h"
 #include "../../AudioOutput/AudioOutput.h"
+#include "../../BootLog.h"
 
 static const int VOLUME_BAR_HEIGHT = 45;
 static const int MENU_BAR_HEIGHT = 20;
 
 void displayTask(void *pvParameters) {
   Renderer *renderer = (Renderer *)pvParameters;
+  uint32_t drawCount = 0;
+  bootLog("render", "display task started");
   while (1)
   {
     if (renderer->isRunning)
     {
       if (xSemaphoreTake(renderer->m_displaySemaphore, portMAX_DELAY))
       {
+        if (drawCount < 5)
+        {
+          bootLogf("render", "drawScreen #%lu", drawCount);
+        }
         renderer->drawScreen();
+        drawCount++;
       }
     }
     else 

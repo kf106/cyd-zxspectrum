@@ -14,6 +14,8 @@
 #include "EmulatorScreen/Renderer.h"
 #include "EmulatorScreen/Machine.h"
 #include "EmulatorScreen/GameLoader.h"
+#include "../BootLog.h"
+#include "fonts/GillSans_15_vlw.h"
 
 const std::vector<std::string> tap_extensions = {".tap", ".tzx"};
 const std::vector<std::string> no_sd_card_error = {"No SD Card", "Insert an SD Card", "to load games"};
@@ -21,13 +23,17 @@ const std::vector<std::string> no_files_error = {"No games found", "on the SD Ca
 
 void EmulatorScreen::triggerLoadTape()
 {
-  if (isLoading) {
+  bootLog("emu", "triggerLoadTape called");
+  if (isLoading || m_navigationStack == nullptr) {
+    bootLogf("emu", "triggerLoadTape aborted (loading=%d nav=%p)", isLoading, m_navigationStack);
     return;
   }
+  bootLog("emu", "pausing machine+renderer for tape UI");
   machine->pause();
   renderer->pause();
   if (!m_files->isAvailable())
   {
+    bootLog("emu", "no storage — showing error screen");
     ErrorScreen *errorScreen = new ErrorScreen(
         no_sd_card_error,
         m_tft,
@@ -61,17 +67,55 @@ EmulatorScreen::EmulatorScreen(Display &tft, HDMIDisplay *hdmiDisplay, AudioOutp
   renderer = new Renderer(tft, audioOutput, hdmiDisplay);
   machine = new Machine(renderer, audioOutput, [&]()
                         {
-    Serial.println("ROM loading routine hit");
-    triggerLoadTape(); });
+    bootLog("emu", "ROM tape-loader address hit");
+#ifdef CYD_SKIP_AUTO_TAPE_LOADER
+    bootLog("emu", "auto tape UI disabled on CYD");
+#else
+    triggerLoadTape();
+#endif
+  });
   gameLoader = new GameLoader(machine, renderer, audioOutput);
+}
+
+bool EmulatorScreen::isMachineReady() const
+{
+  ZXSpectrum *speccy = machine != nullptr ? machine->getMachine() : nullptr;
+  return speccy != nullptr && speccy->z80Regs != nullptr && speccy->mem.banks[5] != nullptr &&
+         speccy->mem.banks[5]->ok() && speccy->mem.banks[2] != nullptr && speccy->mem.banks[2]->ok() &&
+         speccy->mem.banks[0] != nullptr && speccy->mem.banks[0]->ok() && speccy->mem.rom[0] != nullptr &&
+         speccy->mem.rom[0]->ok();
 }
 
 void EmulatorScreen::run(std::string filename, models_enum model)
 {
+  if (!isMachineReady())
+  {
+    bootLog("emu", "FATAL: cannot run — Spectrum memory not ready");
+    m_tft.fillScreen(TFT_RED);
+    m_tft.loadFont(GillSans_15_vlw);
+    m_tft.setTextColor(TFT_WHITE, TFT_RED);
+    m_tft.drawCenterString("Out of memory", m_tft.height() / 2 - 20);
+    m_tft.drawCenterString("for 48K emulator", m_tft.height() / 2 + 10);
+    return;
+  }
+  bootLog("emu", "run: fillScreen black");
   m_tft.fillScreen(TFT_BLACK);
+  bootLog("emu", "run: renderer->start");
   renderer->start();
   auto bl = BusyLight();
+  bootLog("emu", "run: machine->setup");
   machine->setup(model);
+  // Run a few frames synchronously and paint once so we are not stuck on the
+  // ILI9341 boot fill while the display task waits for the first triggerDraw.
+  ZXSpectrum *speccy = machine->getMachine();
+  bootLog("emu", "run: priming Z80 frames");
+  for (int i = 0; i < 50; i++)
+  {
+    speccy->runForFrame(nullptr, nullptr);
+  }
+  bootLog("emu", "run: forceRedraw");
+  renderer->forceRedraw(speccy->mem.currentScreen->data, speccy->borderColors);
+  bootLog("emu", "run: forceRedraw done");
   if (filename.size() > 0)
   {
     // check for tap or tpz files
@@ -91,7 +135,9 @@ void EmulatorScreen::run(std::string filename, models_enum model)
     }
   }
   // audioFile = fopen("/fs/audio.raw", "wb");
+  bootLog("emu", "run: machine->start");
   machine->start(audioFile);
+  bootLog("emu", "run: machine task started");
 }
 
 void EmulatorScreen::pause()

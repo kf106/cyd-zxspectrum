@@ -3,6 +3,7 @@
 #include <string.h>
 #include "../../TFT/Display.h"
 #include "../../Serial.h"
+#include "../../BootLog.h"
 
 void displayTask(void *pvParameters);
 
@@ -75,8 +76,8 @@ public:
       m_displaySemaphore = xSemaphoreCreateBinary();
     }
     void start() {
-      xTaskCreatePinnedToCore(displayTask, "displayTask", 8192, this, 1, NULL, 1);
       isRunning = true;
+      xTaskCreatePinnedToCore(displayTask, "displayTask", 8192, this, 1, NULL, 1);
     }
     ~Renderer() {
       free(pixelBuffer);
@@ -90,6 +91,17 @@ public:
         memcpy(currentBorderColors, borderColors, 312);
         xSemaphoreGive(m_displaySemaphore);
       }
+#ifdef BOOT_DEBUG
+      else
+      {
+        static uint8_t skipLogCount = 0;
+        if (skipLogCount < 8)
+        {
+          bootLog("render", "triggerDraw skipped (display busy)");
+          skipLogCount++;
+        }
+      }
+#endif
     }
     void setIsLoading(bool loading) {
       isLoading = loading;
@@ -114,6 +126,7 @@ public:
       firstDraw = true;
     }
     void forceRedraw(const uint8_t *currentScreen = nullptr, const uint8_t *borderColors = nullptr) {
+      bootLog("render", "forceRedraw (sync draw)");
       if (currentScreen != nullptr) {
         memcpy(currentScreenBuffer, currentScreen, 6912);
       }
@@ -122,6 +135,7 @@ public:
       }
       firstDraw = true;
       drawScreen();
+      bootLog("render", "forceRedraw complete");
     }
     bool isShowingMenu = false;
     bool isShowingTimeTravel = false;
