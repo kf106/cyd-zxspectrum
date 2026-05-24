@@ -155,19 +155,9 @@ void GameLoader::loadTape(std::string filename)
   Serial.printf("Total cycles: %lld\n", dummyListener->getTotalTicks());
   delete dummyListener;
   int count = 0;
-  int borderPos = 0;
-  uint8_t currentBorderColors[312] = {0};
   ZXSpectrumTapeListener *listener = new ZXSpectrumTapeListener(machine->getMachine(), [&](uint64_t progress)
                                                                 {
-        // approximate the border position - not very accutare but good enough
-        // get the border color
-        currentBorderColors[borderPos] = machine->getMachine()->hwopt.BorderColor & B00000111;
-        borderPos++;
         count++;
-        if (borderPos == 312) {
-          borderPos = 0;
-          renderer->forceRedraw(machine->getMachine()->mem.currentScreen->data, currentBorderColors);
-        }
         if (count % 4000 == 0) {
           float machineTime = (float) listener->getTotalTicks() / 3500000.0f;
           float wallTime = (float) (get_usecs() - startTime) / 1000000.0f;
@@ -177,7 +167,8 @@ void GameLoader::loadTape(std::string filename)
           Serial.printf("Speed Up: %f\n",  machineTime/wallTime);
           Serial.printf("Progress: %lld\n", progress * 100 / totalTicks);
           renderer->setLoadProgress(progress * 100 / totalTicks);
-          renderer->forceRedraw(machine->getMachine()->mem.currentScreen->data, currentBorderColors);
+          renderer->forceRedraw(machine->getMachine()->mem.currentScreen->data,
+                                machine->getMachine()->borderColors);
           vTaskDelay(1);
         } });
   listener->start();

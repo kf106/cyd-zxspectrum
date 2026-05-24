@@ -37,6 +37,7 @@ class GameFilePickerScreen : public PickerScreen<FileInfoPtr>
             navStack->pop();
           }
           emulatorScreen->loadGameFile(item->getPath().c_str());
+          emulatorScreen->setDeferResume(false);
           return;
         }
         Serial.println("Starting new emulator screen");

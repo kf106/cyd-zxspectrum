@@ -144,6 +144,13 @@ public:
     void setNeedsRedraw() {
       firstDraw = true;
     }
+    void invalidateFramebufferCache() {
+      if (screenBuffer != nullptr) {
+        memset(screenBuffer, 0, 6912);
+      }
+      memset(drawnBorderColors, 0, sizeof(drawnBorderColors));
+      firstDraw = true;
+    }
 #ifdef CYD_TOUCH_KEYBOARD
     void setCydHandedness(bool rightHanded) {
 #if defined(CYD_EMULATOR_W)

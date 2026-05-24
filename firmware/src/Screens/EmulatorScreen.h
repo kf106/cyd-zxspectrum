@@ -38,6 +38,7 @@ class EmulatorScreen : public Screen
     Renderer *getRenderer() { return renderer; }
     Machine *getMachine() { return machine; }
     void loadGameFile(const char *path);
+    void finishGameLoad();
     void setDeferResume(bool defer) { m_deferResume = defer; }
 #ifdef CYD_TOUCH_KEYBOARD
     bool usesCydTouch() const override;

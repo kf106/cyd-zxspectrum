@@ -203,6 +203,46 @@ void EmulatorScreen::willDisappear()
   pause();
 }
 
+void EmulatorScreen::finishGameLoad()
+{
+  ZXSpectrum *speccy = machine != nullptr ? machine->getMachine() : nullptr;
+  if (speccy == nullptr || renderer == nullptr)
+  {
+    return;
+  }
+  renderer->setIsLoading(false);
+  renderer->setLoadProgress(0);
+  renderer->invalidateFramebufferCache();
+  renderer->pause();
+  machine->pause();
+  for (int i = 0; i < 50; i++)
+  {
+    speccy->runForFrame(nullptr, nullptr);
+  }
+  for (int i = 0; i < 8; i++)
+  {
+    speckey[i] = 0xFF;
+  }
+#ifdef CYD_TOUCH_KEYBOARD
+  renderer->setCydKeyboardOverlayEnabled(true);
+  if (m_navigationStack != nullptr)
+  {
+    m_navigationStack->setCydKeyboardEnabled(true);
+  }
+  if (m_cydTouchKeyboard != nullptr)
+  {
+    m_cydTouchKeyboard->invalidateOverlay();
+  }
+  renderer->drawFrameSync(speccy->mem.currentScreen->data, speccy->borderColors);
+  renderer->resume();
+#else
+  renderer->drawFrameSync(speccy->mem.currentScreen->data, speccy->borderColors);
+  renderer->resume();
+#endif
+  machine->resume();
+  isLoading = false;
+}
+
 void EmulatorScreen::loadGameFile(const char *path)
 {
   if (path == nullptr || machine == nullptr)
@@ -224,20 +264,14 @@ void EmulatorScreen::loadGameFile(const char *path)
   {
     machine->startLoading();
     loadTape(path);
+    finishGameLoad();
     return;
   }
   {
     auto bl = BusyLight();
     Load(machine->getMachine(), path);
   }
-  ZXSpectrum *speccy = machine->getMachine();
-#ifdef CYD_TOUCH_KEYBOARD
-  refreshCydKeyboard();
-#else
-  renderer->drawFrameSync(speccy->mem.currentScreen->data, speccy->borderColors);
-  renderer->resume();
-#endif
-  machine->resume();
+  finishGameLoad();
 }
 
 void EmulatorScreen::pressKey(SpecKeys key)
@@ -420,18 +454,4 @@ void EmulatorScreen::loadTape(std::string filename)
   renderer->setIsLoading(true);
   renderer->setNeedsRedraw();
   gameLoader->loadTape(filename);
-  renderer->setIsLoading(false);
-  for (int i = 0; i < 8; i++)
-  {
-    speckey[i] = 0xFF;
-  }
-#ifdef CYD_TOUCH_KEYBOARD
-  if (m_navigationStack != nullptr)
-  {
-    m_navigationStack->setCydKeyboardEnabled(true);
-  }
-  refreshCydKeyboard();
-#endif
-  machine->resume();
-  isLoading = false;
 }
