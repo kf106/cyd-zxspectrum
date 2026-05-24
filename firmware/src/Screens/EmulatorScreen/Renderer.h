@@ -161,7 +161,14 @@ public:
         memcpy(currentBorderColors, borderColors, 312);
       }
       firstDraw = true;
-      drawScreen();
+      if (!isRunning) {
+        drawScreen();
+        return;
+      }
+      if (drawReady) {
+        drawReady = false;
+        xSemaphoreGive(m_displaySemaphore);
+      }
     }
 #ifndef CYD_NO_EMULATOR_MENU
     bool isShowingMenu = false;

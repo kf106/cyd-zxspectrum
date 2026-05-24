@@ -5,16 +5,26 @@
 #include "../TFT/Display.h"
 #include "../TFT/HDMIDisplay.h"
 
+#ifdef CYD_TOUCH_KEYBOARD
+class CydTouchKeyboard;
+#endif
 
 class NavigationStack
 {
   private:
     Display *m_tft;
     HDMIDisplay *m_hdmiDisplay;
+#ifdef CYD_TOUCH_KEYBOARD
+    CydTouchKeyboard *m_cydTouchKeyboard = nullptr;
+#endif
   public:
     std::vector<Screen *> stack;
     NavigationStack(Display *tft, HDMIDisplay *hdmiDisplay) : m_tft(tft), m_hdmiDisplay(hdmiDisplay) {}
     ~NavigationStack() {}
+#ifdef CYD_TOUCH_KEYBOARD
+    void setCydTouchKeyboard(CydTouchKeyboard *keyboard) { m_cydTouchKeyboard = keyboard; }
+    void setCydKeyboardEnabled(bool enabled);
+#endif
     Screen *getTop() {
       if (stack.size() > 0) {
         return stack.back();

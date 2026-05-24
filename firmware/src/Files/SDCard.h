@@ -10,13 +10,14 @@ class SDCard
 private:
   bool _isMounted = false;
   std::string m_mountPoint;
-  sdmmc_card_t *m_card;
+  sdmmc_card_t *m_card = nullptr;
   #ifdef USE_SDIO
     sdmmc_host_t m_host = SDMMC_HOST_DEFAULT();
   #else
     sdmmc_host_t m_host = SDSPI_HOST_DEFAULT();
   #endif
-  SemaphoreHandle_t m_mutex;
+  SemaphoreHandle_t m_mutex = nullptr;
+  bool m_ownsSpiBus = false;
   int m_sector_size = 0;
   int m_sector_count = 0;
 public:

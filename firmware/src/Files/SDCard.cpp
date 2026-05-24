@@ -1,5 +1,6 @@
 #include <Arduino.h>
 #include <freertos/FreeRTOS.h>
+#include <driver/gpio.h>
 #include "Serial.h"
 #include "esp_err.h"
 #include "esp_log.h"
@@ -10,6 +11,22 @@
 #include "diskio.h"  // FatFS disk I/O
 
 #define SPI_DMA_CHAN SPI_DMA_CH_AUTO
+
+#ifndef SD_CARD_MAX_FREQ_KHZ
+#define SD_CARD_MAX_FREQ_KHZ 20000
+#endif
+
+static void logSdMountError(esp_err_t ret)
+{
+  if (ret == ESP_FAIL)
+  {
+    Serial.println("Failed to mount SD filesystem (card may not be FAT32).");
+  }
+  else
+  {
+    Serial.printf("Failed to initialize SD card (%s).\n", esp_err_to_name(ret));
+  }
+}
 
 SDCard::SDCard(const char *mountPoint, gpio_num_t clk, gpio_num_t cmd, gpio_num_t d0, gpio_num_t d1, gpio_num_t d2, gpio_num_t d3)
 {
@@ -71,14 +88,11 @@ SDCard::SDCard(const char *mountPoint, gpio_num_t clk, gpio_num_t cmd, gpio_num_
 
 SDCard::SDCard(const char *mountPoint, gpio_num_t cs) {
   m_mountPoint = mountPoint;
-  m_host.max_freq_khz = SDMMC_FREQ_52M;
+  m_host.max_freq_khz = SD_CARD_MAX_FREQ_KHZ;
 #ifdef SD_CARD_SPI_HOST
   m_host.slot = SD_CARD_SPI_HOST;
 #endif
   esp_err_t ret;
-  // Options for mounting the filesystem.
-  // If format_if_mount_failed is set to true, SD card will be partitioned and
-  // formatted in case when mounting fails.
   esp_vfs_fat_sdmmc_mount_config_t mount_config = {
       .format_if_mount_failed = false,
       .max_files = 5,
@@ -86,8 +100,6 @@ SDCard::SDCard(const char *mountPoint, gpio_num_t cs) {
 
   Serial.println("Initializing SD card");
 
-  // This initializes the slot without card detect (CD) and write protect (WP) signals.
-  // Modify slot_config.gpio_cd and slot_config.gpio_wp if your board has these signals.
   sdspi_device_config_t slot_config = SDSPI_DEVICE_CONFIG_DEFAULT();
   slot_config.gpio_cs = cs;
   slot_config.host_id = spi_host_device_t(m_host.slot);
@@ -95,21 +107,10 @@ SDCard::SDCard(const char *mountPoint, gpio_num_t cs) {
   ret = esp_vfs_fat_sdspi_mount(mountPoint, &m_host, &slot_config, &mount_config, &m_card);
   if (ret != ESP_OK)
   {
-    if (ret == ESP_FAIL)
-    {
-      Serial.println("Failed to mount filesystem. "
-                    "If you want the card to be formatted, set the EXAMPLE_FORMAT_IF_MOUNT_FAILED menuconfig option.");
-    }
-    else
-    {
-      Serial.printf("Failed to initialize the card (%s). "
-                    "Make sure SD card lines have pull-up resistors in place.\n",
-               esp_err_to_name(ret));
-    }
+    logSdMountError(ret);
     return;
   }
   Serial.printf("SDCard mounted at: %s\n", mountPoint);
-  // Card has been initialized, print its properties
   sdmmc_card_print_info(stdout, m_card);
   _isMounted = true;
 
@@ -122,19 +123,20 @@ SDCard::SDCard(const char *mountPoint, gpio_num_t cs) {
 SDCard::SDCard(const char *mountPoint, gpio_num_t miso, gpio_num_t mosi, gpio_num_t clk, gpio_num_t cs)
 {
   m_mountPoint = mountPoint;
-  m_host.max_freq_khz = SDMMC_FREQ_52M;
-  // only enable on ESP32 
-  #ifdef SD_CARD_SPI_HOST
+  m_host.max_freq_khz = SD_CARD_MAX_FREQ_KHZ;
+#ifdef SD_CARD_SPI_HOST
   m_host.slot = SD_CARD_SPI_HOST;
-  #endif
+#endif
   esp_err_t ret;
-  // Options for mounting the filesystem.
-  // If format_if_mount_failed is set to true, SD card will be partitioned and
-  // formatted in case when mounting fails.
   esp_vfs_fat_sdmmc_mount_config_t mount_config = {
       .format_if_mount_failed = false,
       .max_files = 5,
       .allocation_unit_size = 16 * 1024};
+
+  gpio_set_direction(cs, GPIO_MODE_OUTPUT);
+  gpio_set_level(cs, 1);
+
+  Serial.printf("Initializing SD card (MISO=%d MOSI=%d CLK=%d CS=%d)\n", miso, mosi, clk, cs);
 
   spi_bus_config_t bus_cfg = {
       .mosi_io_num = mosi,
@@ -149,11 +151,11 @@ SDCard::SDCard(const char *mountPoint, gpio_num_t miso, gpio_num_t mosi, gpio_nu
   ret = spi_bus_initialize(spi_host_device_t(m_host.slot), &bus_cfg, SPI_DMA_CHAN);
   if (ret != ESP_OK)
   {
+    Serial.printf("SD card SPI bus init failed (%s)\n", esp_err_to_name(ret));
     return;
   }
+  m_ownsSpiBus = true;
 
-  // This initializes the slot without card detect (CD) and write protect (WP) signals.
-  // Modify slot_config.gpio_cd and slot_config.gpio_wp if your board has these signals.
   sdspi_device_config_t slot_config = SDSPI_DEVICE_CONFIG_DEFAULT();
   slot_config.gpio_cs = cs;
   slot_config.host_id = spi_host_device_t(m_host.slot);
@@ -161,8 +163,12 @@ SDCard::SDCard(const char *mountPoint, gpio_num_t miso, gpio_num_t mosi, gpio_nu
   ret = esp_vfs_fat_sdspi_mount(mountPoint, &m_host, &slot_config, &mount_config, &m_card);
   if (ret != ESP_OK)
   {
+    logSdMountError(ret);
+    spi_bus_free(spi_host_device_t(m_host.slot));
+    m_ownsSpiBus = false;
     return;
   }
+  Serial.printf("SDCard mounted at: %s\n", mountPoint);
   sdmmc_card_print_info(stdout, m_card);
   _isMounted = true;
 
@@ -174,10 +180,16 @@ SDCard::SDCard(const char *mountPoint, gpio_num_t miso, gpio_num_t mosi, gpio_nu
 
 SDCard::~SDCard()
 {
-  // All done, unmount partition and disable SDMMC or SPI peripheral
-  esp_vfs_fat_sdcard_unmount(m_mountPoint.c_str(), m_card);
-  //deinitialize the bus after all devices are removed
-  spi_bus_free(spi_host_device_t(m_host.slot));
+  if (_isMounted && m_card)
+  {
+    esp_vfs_fat_sdcard_unmount(m_mountPoint.c_str(), m_card);
+    _isMounted = false;
+  }
+  if (m_ownsSpiBus)
+  {
+    spi_bus_free(spi_host_device_t(m_host.slot));
+    m_ownsSpiBus = false;
+  }
 }
 
 bool SDCard::writeSectors(uint8_t *src, size_t start_sector, size_t sector_count) {

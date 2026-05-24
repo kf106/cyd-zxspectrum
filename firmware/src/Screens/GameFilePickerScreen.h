@@ -31,11 +31,11 @@ class GameFilePickerScreen : public PickerScreen<FileInfoPtr>
         {
           Serial.println("Loading file into existing emulator screen");
           NavigationStack *navStack = m_navigationStack;
+          emulatorScreen->setDeferResume(true);
           while (navStack->stack.size() > 1 && navStack->stack.back() != emulatorScreen)
           {
             navStack->pop();
           }
-          drawBusy();
           emulatorScreen->loadGameFile(item->getPath().c_str());
           return;
         }

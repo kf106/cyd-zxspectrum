@@ -145,7 +145,14 @@ void EmulatorScreen::didAppear()
     m_cydTouchKeyboard->invalidateOverlay();
   }
 #endif
-  resume();
+  if (m_deferResume)
+  {
+    m_deferResume = false;
+  }
+  else
+  {
+    resume();
+  }
 #ifdef CYD_TOUCH_KEYBOARD
   if (renderer != nullptr)
   {
@@ -187,8 +194,9 @@ void EmulatorScreen::loadGameFile(const char *path)
   {
     return;
   }
-  auto bl = BusyLight();
-  drawBusy();
+  pause();
+  renderer->waitForIdle();
+
   std::string ext = path;
   size_t dot = ext.find_last_of('.');
   if (dot != std::string::npos)
@@ -202,8 +210,13 @@ void EmulatorScreen::loadGameFile(const char *path)
     loadTape(path);
     return;
   }
-  Load(machine->getMachine(), path);
-  renderer->forceRedraw();
+  {
+    auto bl = BusyLight();
+    Load(machine->getMachine(), path);
+  }
+  ZXSpectrum *speccy = machine->getMachine();
+  renderer->forceRedraw(speccy->mem.currentScreen->data, speccy->borderColors);
+  resume();
 }
 
 void EmulatorScreen::pressKey(SpecKeys key)

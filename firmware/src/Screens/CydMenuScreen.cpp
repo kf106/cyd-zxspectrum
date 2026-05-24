@@ -145,6 +145,7 @@ static void drawMenuMarker(Display &tft, int itemX, int rowY, bool enabled)
 }
 
 static const std::vector<std::string> kGameExtensions = {".z80", ".sna", ".tap", ".tzx"};
+static const std::vector<std::string> kSnapshotExtensions = {".z80"};
 
 CydMenuScreen::CydMenuScreen(
     Display &tft,
@@ -354,7 +355,7 @@ int CydMenuScreen::rowIndexAt(int16_t x, int16_t y) const
   return -1;
 }
 
-void CydMenuScreen::pollCydMenuTouch()
+void CydMenuScreen::pollCydTouch()
 {
   int16_t x = 0;
   int16_t y = 0;
@@ -432,7 +433,7 @@ void CydMenuScreen::runAction(Action action)
     showAlphabetPicker(
         "Snapshots",
         "/snapshots",
-        kGameExtensions,
+        kSnapshotExtensions,
         {"No SD Card", "Insert an SD Card", "to load snapshots"},
         {"No snapshots found", "on the SD Card", "save snapshots from the menu"});
     break;

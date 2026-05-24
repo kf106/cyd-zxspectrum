@@ -198,6 +198,7 @@ void setup(void)
       [&](SpecKeys key, bool down) { navigationStack->updateKey(key, down); },
       cydRightHanded,
       [&](SpecKeys key) { navigationStack->pressKey(key); });
+  navigationStack->setCydTouchKeyboard(cydTouchKeyboard);
   emulatorScreen->setCydTouchKeyboard(cydTouchKeyboard, settings);
   cydTouchKeyboard->start();
 #endif
@@ -254,9 +255,9 @@ void setup(void)
 #ifdef CYD_TOUCH_KEYBOARD
     emulatorScreen->openMenuIfRequested();
     Screen *topScreen = navigationStack->getTop();
-    if (topScreen != nullptr && topScreen->isCydMenu())
+    if (topScreen != nullptr && topScreen->usesCydTouch())
     {
-      topScreen->pollCydMenuTouch();
+      topScreen->pollCydTouch();
     }
 #endif
 #ifndef CYD_NO_EMULATOR_MENU

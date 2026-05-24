@@ -24,8 +24,8 @@ public:
 
   void didAppear() override;
   void willDisappear() override;
-  bool isCydMenu() const override { return true; }
-  void pollCydMenuTouch() override;
+  bool usesCydTouch() const override { return true; }
+  void pollCydTouch() override;
 
 private:
   enum class Action

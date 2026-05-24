@@ -23,7 +23,7 @@ Target board: **ESP32-2432S028** (320×240 ILI9341 TFT, XPT2046 touch, microSD o
 |----------|------|
 | TFT SPI | 14 SCLK, 12 MISO, 13 MOSI, 15 CS, 2 DC, 21 BL |
 | Touch (bit-bang) | 33 CS, 36 IRQ, 25 CLK, 39 MISO, 32 MOSI |
-| SD card | 5 CS (shared SPI2 with TFT) |
+| SD card | VSPI: CS 5, CLK 18, MISO 19, MOSI 23 (separate from TFT HSPI) |
 | Buzzer (PWM) | 26 |
 
 Other ESP32 boards from the upstream project may still build from `firmware/platformio.ini`, but **only `cheap-yellow-display` is the focus here**.
@@ -107,7 +107,7 @@ To calibrate again:
 
 ## Games and storage
 
-**SD card (recommended):** format as **FAT32**, copy `.z80`, `.sna`, `.tap`, or `.tzx` files to the card root (or use **Menu → Load game / tape** to browse).
+**SD card (recommended):** format as **FAT32** (not exFAT; 64 GB cards work if formatted FAT32), copy `.z80`, `.sna`, `.tap`, or `.tzx` files to the card root (or use **Menu → Load game / tape** to browse).
 
 **Without SD:** put files in `firmware/data/` and upload the filesystem (`pio run -t uploadfs`).
 

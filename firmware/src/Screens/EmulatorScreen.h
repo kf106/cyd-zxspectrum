@@ -24,6 +24,7 @@ class EmulatorScreen : public Screen
     void triggerLoadTape();
     bool isLoading = false;
     bool isMachineReady() const;
+    bool m_deferResume = false;
   public:
     EmulatorScreen(Display &tft, HDMIDisplay *hdmiDisplay, AudioOutput *audioOutput, IFiles *files);
     void updateKey(SpecKeys key, uint8_t state);
@@ -37,6 +38,7 @@ class EmulatorScreen : public Screen
     Renderer *getRenderer() { return renderer; }
     Machine *getMachine() { return machine; }
     void loadGameFile(const char *path);
+    void setDeferResume(bool defer) { m_deferResume = defer; }
 #ifdef CYD_TOUCH_KEYBOARD
     void setCydHandedness(bool rightHanded);
     void setCydTouchKeyboard(CydTouchKeyboard *keyboard, ISettings *settings);

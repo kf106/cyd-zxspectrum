@@ -62,8 +62,10 @@ class Screen {
   // lifecycle
   virtual void didAppear() {}
   virtual void willDisappear() {}
-  virtual bool isCydMenu() const { return false; }
-  virtual void pollCydMenuTouch() {}
+#ifdef CYD_TOUCH_KEYBOARD
+  virtual bool usesCydTouch() const { return false; }
+  virtual void pollCydTouch() {}
+#endif
   void setNavigationStack(NavigationStack *navigationStack) {
     m_navigationStack = navigationStack;
   }
