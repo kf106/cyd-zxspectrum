@@ -24,9 +24,9 @@
  ======================================================================*/
 #include <stdint.h>
 #include <stdio.h>
+#include <string.h>
 #include <algorithm>
 #include <string>
-#include <string.h>
 #include "./z80/z80.h"
 #include "./spectrum.h"
 #include "./snaps.h"
@@ -234,6 +234,8 @@ bool loadZ80Version1(ZXSpectrum *speccy, uint8_t *buffer, FILE *fp)
   printf("PC: %x\n", speccy->z80Regs->PC.W);
   loadZ80Regs(speccy, buffer);
   printf("PC: %x\n", speccy->z80Regs->PC.W);
+  speccy->mem.page(32, true);
+  speccy->z80Regs->halted = 0;
   return true;
 }
 
@@ -511,6 +513,11 @@ bool LoadSNA(ZXSpectrum *speccy, const char *filename)
     }
   }
   fclose(fp);
+  if (model == SPECMDL_48K || model == SPECMDL_16K)
+  {
+    speccy->mem.page(32, true);
+    speccy->z80Regs->halted = 0;
+  }
   return true;
 }
 

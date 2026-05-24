@@ -96,7 +96,11 @@ public:
     }
     void start() {
       isRunning = true;
+#ifdef CYD_TOUCH_KEYBOARD
+      xTaskCreatePinnedToCore(displayTask, "displayTask", 4096, this, 1, NULL, 1);
+#else
       xTaskCreatePinnedToCore(displayTask, "displayTask", 8192, this, 1, NULL, 1);
+#endif
     }
     ~Renderer() {
       free(pixelBuffer);
@@ -163,12 +167,27 @@ public:
       firstDraw = true;
       if (!isRunning) {
         drawScreen();
+        drawReady = true;
         return;
       }
-      if (drawReady) {
-        drawReady = false;
-        xSemaphoreGive(m_displaySemaphore);
+      drawReady = false;
+      xSemaphoreGive(m_displaySemaphore);
+    }
+    // Paint on the calling thread. Caller must pause() the display task first.
+    void drawFrameSync(const uint8_t *currentScreen = nullptr, const uint8_t *borderColors = nullptr) {
+      if (currentScreen != nullptr) {
+        memcpy(currentScreenBuffer, currentScreen, 6912);
       }
+      if (borderColors != nullptr) {
+        memcpy(currentBorderColors, borderColors, 312);
+      }
+      if (screenBuffer != nullptr) {
+        memset(screenBuffer, 0, 6912);
+      }
+      memset(drawnBorderColors, 0, sizeof(drawnBorderColors));
+      firstDraw = true;
+      drawScreen();
+      drawReady = true;
     }
 #ifndef CYD_NO_EMULATOR_MENU
     bool isShowingMenu = false;

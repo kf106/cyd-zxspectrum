@@ -165,11 +165,15 @@ void CydTouchKeyboard::setRightHanded(bool rightHanded)
 
 void CydTouchKeyboard::setEnabled(bool enabled)
 {
-  m_enabled = enabled;
-  if (!enabled && (m_activeKey != SPECKEY_NONE || m_activeRowSelect >= 0))
+  if (!enabled)
   {
-    releaseActiveKey();
+    if (m_activeKey != SPECKEY_NONE || m_activeRowSelect >= 0)
+    {
+      releaseActiveKey();
+    }
+    releaseLatchedModifiers();
   }
+  m_enabled = enabled;
 }
 
 void CydTouchKeyboard::invalidateOverlay()
@@ -181,10 +185,16 @@ void CydTouchKeyboard::invalidateOverlay()
   m_lastDrawnHighlight = -1;
 }
 
+void CydTouchKeyboard::pollTouchInput()
+{
+  pollTouch();
+}
+
 void CydTouchKeyboard::start()
 {
   CydTouch::init();
-  xTaskCreatePinnedToCore(keyboardTask, "cydTouchKb", 8192, this, 1, nullptr, 0);
+  // Touch is polled from the Z80 runner on core 0 (see Machine::runEmulator) so it
+  // does not run concurrently with the TFT SPI driver on core 1.
 }
 
 bool CydTouchKeyboard::isModifierKey(SpecKeys key) const
@@ -631,10 +641,15 @@ void CydTouchKeyboard::pollTouch()
   {
     if (m_activeKey != SPECKEY_NONE || m_activeRowSelect >= 0)
     {
-      releaseActiveKey();
+      if (++m_touchMissReads >= 3)
+      {
+        releaseActiveKey();
+        m_touchMissReads = 0;
+      }
     }
     return;
   }
+  m_touchMissReads = 0;
   int index = hitTest(x, y);
   if (index < 0)
   {

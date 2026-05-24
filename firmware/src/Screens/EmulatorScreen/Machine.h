@@ -178,7 +178,10 @@ class Machine {
     // the actual machine
     ZXSpectrum *machine = nullptr;
     // are we currently running?
-    bool isRunning = false;
+    volatile bool isRunning = false;
+    TaskHandle_t m_runnerTask = nullptr;
+    bool m_useMainLoopFallback = false;
+    bool ensureRunnerTask();
     // the renderer - we trigger a redraw every frame
     Renderer *renderer = nullptr;
     // where are we sending audio?
@@ -196,11 +199,14 @@ class Machine {
 #endif
     // callback for when rom loading routine is hit
     std::function<void()> romLoadingRoutineHitCallback;
+    std::function<void()> m_touchPollCallback;
   public:
     Machine(Renderer *renderer, AudioOutput *audioOutput, std::function<void()> romLoadingRoutineHitCallback);
+    void setTouchPollCallback(std::function<void()> callback) { m_touchPollCallback = callback; }
     void updateKey(SpecKeys key, uint8_t state);
     void setup(models_enum model);
     void start(FILE *audioFile);
+    void tickMainLoop();
     void pause() {
       isRunning = false;
     }

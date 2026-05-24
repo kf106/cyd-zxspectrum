@@ -20,6 +20,7 @@
 #include "EmulatorScreen/Renderer.h"
 #ifdef CYD_TOUCH_KEYBOARD
 #include "../Input/CydTouchKeyboard.h"
+#include "../Input/CydTouchDriver.h"
 #endif
 #include "EmulatorScreen/Machine.h"
 #include "EmulatorScreen/GameLoader.h"
@@ -100,17 +101,34 @@ void EmulatorScreen::run(std::string filename, models_enum model)
     return;
   }
   m_tft.fillScreen(TFT_BLACK);
-  renderer->start();
   auto bl = BusyLight();
   machine->setup(model);
+  renderer->start();
+  Serial.println("Machine setup complete");
   // Run a few frames synchronously and paint once so we are not stuck on the
   // ILI9341 boot fill while the display task waits for the first triggerDraw.
   ZXSpectrum *speccy = machine->getMachine();
-  for (int i = 0; i < 50; i++)
+  for (int i = 0; i < 150; i++)
   {
     speccy->runForFrame(nullptr, nullptr);
   }
-  renderer->forceRedraw(speccy->mem.currentScreen->data, speccy->borderColors);
+  uint32_t screenSum = 0;
+  for (int i = 0; i < 6912; i++)
+  {
+    screenSum += speccy->mem.currentScreen->data[i];
+  }
+  Serial.printf("Boot frames complete, screen checksum %u, drawing\n", (unsigned)screenSum);
+  renderer->pause();
+  renderer->drawFrameSync(speccy->mem.currentScreen->data, speccy->borderColors);
+#ifdef CYD_TOUCH_KEYBOARD
+  if (m_cydTouchKeyboard != nullptr)
+  {
+    m_cydTouchKeyboard->invalidateOverlay();
+  }
+  renderer->drawFrameSync(speccy->mem.currentScreen->data, speccy->borderColors);
+#endif
+  renderer->resume();
+  Serial.println("First screen draw complete");
   if (filename.size() > 0)
   {
     // check for tap or tpz files
@@ -129,8 +147,8 @@ void EmulatorScreen::run(std::string filename, models_enum model)
       Load(machine->getMachine(), filename.c_str());
     }
   }
-  // audioFile = fopen("/fs/audio.raw", "wb");
   machine->start(audioFile);
+  m_emulatorStarted = true;
 }
 
 void EmulatorScreen::didAppear()
@@ -149,16 +167,13 @@ void EmulatorScreen::didAppear()
   {
     m_deferResume = false;
   }
-  else
+  else if (m_emulatorStarted)
   {
     resume();
-  }
 #ifdef CYD_TOUCH_KEYBOARD
-  if (renderer != nullptr)
-  {
-    renderer->setNeedsRedraw();
-  }
+    refreshCydKeyboard();
 #endif
+  }
 }
 
 void EmulatorScreen::pause()
@@ -207,6 +222,7 @@ void EmulatorScreen::loadGameFile(const char *path)
   }
   if (ext == ".tap" || ext == ".tzx")
   {
+    machine->startLoading();
     loadTape(path);
     return;
   }
@@ -215,8 +231,13 @@ void EmulatorScreen::loadGameFile(const char *path)
     Load(machine->getMachine(), path);
   }
   ZXSpectrum *speccy = machine->getMachine();
-  renderer->forceRedraw(speccy->mem.currentScreen->data, speccy->borderColors);
-  resume();
+#ifdef CYD_TOUCH_KEYBOARD
+  refreshCydKeyboard();
+#else
+  renderer->drawFrameSync(speccy->mem.currentScreen->data, speccy->borderColors);
+  renderer->resume();
+#endif
+  machine->resume();
 }
 
 void EmulatorScreen::pressKey(SpecKeys key)
@@ -327,6 +348,27 @@ void EmulatorScreen::setCydHandedness(bool rightHanded)
   renderer->setCydHandedness(rightHanded);
 }
 
+bool EmulatorScreen::usesCydTouch() const
+{
+  return m_cydTouchKeyboard != nullptr;
+}
+
+void EmulatorScreen::pollCydTouch()
+{
+  if (m_cydTouchKeyboard != nullptr)
+  {
+    m_cydTouchKeyboard->pollTouchInput();
+  }
+}
+
+void EmulatorScreen::tickEmulation()
+{
+  if (m_emulatorStarted && machine != nullptr)
+  {
+    machine->tickMainLoop();
+  }
+}
+
 void EmulatorScreen::setCydTouchKeyboard(CydTouchKeyboard *keyboard, ISettings *settings)
 {
   m_cydTouchKeyboard = keyboard;
@@ -334,19 +376,62 @@ void EmulatorScreen::setCydTouchKeyboard(CydTouchKeyboard *keyboard, ISettings *
   if (settings != nullptr)
   {
     renderer->setCydHandedness(settings->isCydRightHanded());
+    CydTouch::setCalibration(settings->getCydTouchCalibration());
   }
   renderer->setCydTouchKeyboard(keyboard);
+}
+
+void EmulatorScreen::refreshCydKeyboard()
+{
+  if (renderer == nullptr)
+  {
+    return;
+  }
+  renderer->pause();
+  renderer->setCydKeyboardOverlayEnabled(true);
+  if (m_cydTouchKeyboard != nullptr)
+  {
+    m_cydTouchKeyboard->invalidateOverlay();
+  }
+  if (machine != nullptr && machine->getMachine() != nullptr)
+  {
+    ZXSpectrum *speccy = machine->getMachine();
+    renderer->drawFrameSync(speccy->mem.currentScreen->data, speccy->borderColors);
+  }
+  else
+  {
+    renderer->drawFrameSync();
+  }
+  renderer->resume();
 }
 #endif
 
 void EmulatorScreen::loadTape(std::string filename)
 {
   isLoading = true;
+#ifdef CYD_TOUCH_KEYBOARD
+  renderer->setCydKeyboardOverlayEnabled(false);
+  if (m_navigationStack != nullptr)
+  {
+    m_navigationStack->setCydKeyboardEnabled(false);
+  }
+#endif
   renderer->resume();
+  renderer->setIsLoading(true);
   renderer->setNeedsRedraw();
   gameLoader->loadTape(filename);
   renderer->setIsLoading(false);
-  renderer->setNeedsRedraw();
+  for (int i = 0; i < 8; i++)
+  {
+    speckey[i] = 0xFF;
+  }
+#ifdef CYD_TOUCH_KEYBOARD
+  if (m_navigationStack != nullptr)
+  {
+    m_navigationStack->setCydKeyboardEnabled(true);
+  }
+  refreshCydKeyboard();
+#endif
   machine->resume();
   isLoading = false;
 }

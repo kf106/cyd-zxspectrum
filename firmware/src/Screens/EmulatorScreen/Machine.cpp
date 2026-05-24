@@ -1,6 +1,7 @@
 #include "./Machine.h"
 #include "./Renderer.h"
 #include "../../AudioOutput/AudioOutput.h"
+#include <esp_heap_caps.h>
 void runnerTask(void *pvParameter)
 {
   Machine *machine = (Machine *)pvParameter;
@@ -8,6 +9,7 @@ void runnerTask(void *pvParameter)
 }
 
 void Machine::runEmulator() {
+  Serial.println("Z80 runner task running");
   unsigned long lastTime = millis();
   bool romLoadCallbackFired = false;
   while (1)
@@ -46,10 +48,14 @@ void Machine::runEmulator() {
       {
         romLoadCallbackFired = false;
       }
+      if (m_touchPollCallback)
+      {
+        m_touchPollCallback();
+      }
     }
     else
     {
-      vTaskDelay(100 / portTICK_PERIOD_MS);
+      vTaskDelay(10 / portTICK_PERIOD_MS);
     }
   }
 }
@@ -64,7 +70,7 @@ Machine::Machine(Renderer *renderer, AudioOutput *audioOutput, std::function<voi
 }
 
 void Machine::updateKey(SpecKeys key, uint8_t state) {
-  if (isRunning) {
+  if (machine != nullptr) {
     machine->updateKey(key, state);
   }
 }
@@ -74,12 +80,56 @@ void Machine::setup(models_enum model) {
   machine->reset();
   machine->init_spectrum(model);
   machine->reset_spectrum(machine->z80Regs);
+  ensureRunnerTask();
+}
+
+bool Machine::ensureRunnerTask() {
+  if (m_runnerTask != nullptr)
+  {
+    return true;
+  }
+  static const uint32_t kStacks[] = {4096, 5120, 6144, 3072};
+  for (uint32_t stack : kStacks)
+  {
+    Serial.printf("Creating Z80 runner (stack %u, free %u, largest %u)\n",
+                  (unsigned)stack, (unsigned)ESP.getFreeHeap(),
+                  (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_8BIT));
+    BaseType_t created = xTaskCreatePinnedToCore(runnerTask, "z80Runner", stack, this, 4, &m_runnerTask, 0);
+    if (created == pdPASS)
+    {
+      Serial.printf("Z80 runner task created (stack %u)\n", (unsigned)stack);
+      return true;
+    }
+  }
+  Serial.println("Z80 runner task unavailable — will emulate on main loop");
+  m_useMainLoopFallback = true;
+  return false;
 }
 
 void Machine::start(FILE *audioFile) {
   this->audioFile = audioFile;
+  if (!m_useMainLoopFallback)
+  {
+    ensureRunnerTask();
+  }
   isRunning = true;
-  xTaskCreatePinnedToCore(runnerTask, "z80Runner", 8192, this, 5, NULL, 0);
+  if (m_runnerTask != nullptr)
+  {
+    Serial.println("Z80 runner started");
+  }
+  else
+  {
+    Serial.println("Z80 emulation on main loop");
+  }
+}
+
+void Machine::tickMainLoop() {
+  if (!m_useMainLoopFallback || !isRunning || m_runnerTask != nullptr)
+  {
+    return;
+  }
+  cycleCount += machine->runForFrame(audioOutput, audioFile);
+  renderer->triggerDraw(machine->mem.currentScreen->data, machine->borderColors);
 }
 
 void Machine::tapKey(SpecKeys key)

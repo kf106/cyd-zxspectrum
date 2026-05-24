@@ -24,6 +24,10 @@ public:
     if (bufferSize > 0)
     {
       buffer = heap_caps_malloc(bufferSize, MALLOC_CAP_DMA);
+      if (buffer == nullptr)
+      {
+        Serial.printf("Failed to allocate TFT DMA buffer (%u bytes)\n", (unsigned)bufferSize);
+      }
     }
   }
 
@@ -51,10 +55,14 @@ public:
       }
       transaction.flags = SPI_TRANS_USE_TXDATA | SPI_TRANS_USE_RXDATA;
     }
-    else
+    else if (buffer != nullptr)
     {
       memcpy(buffer, data, len);
       transaction.tx_buffer = buffer;
+    }
+    else
+    {
+      return false;
     }
     return true;
   }
@@ -66,6 +74,10 @@ public:
 
   bool setColor(uint16_t color, int numPixels)
   {
+    if (buffer == nullptr)
+    {
+      return false;
+    }
     uint16_t *pixels = (uint16_t *)buffer;
     for (int i = 0; i < numPixels; i++)
     {

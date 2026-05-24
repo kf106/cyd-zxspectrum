@@ -14,5 +14,6 @@ class GameLoader
     AudioOutput *audioOutput = nullptr;
   public:
     GameLoader(Machine *machine, Renderer *renderer, AudioOutput *audioOutput);
+    static void reserveTapeBuffer(size_t size);
     void loadTape(std::string filename);
 };

@@ -55,6 +55,13 @@
 #include "SerialInterface/Messages/DeleteFile.h"
 #include "SerialInterface/Messages/MakeDirectory.h"
 #include "SerialInterface/Messages/RenameFile.h"
+#ifdef CYD_TAPE_BUFFER_SIZE
+class GameLoader
+{
+public:
+  static void reserveTapeBuffer(size_t size);
+};
+#endif
 void SerialInterfaceTask(void *arg) {
   PacketHandler *packetHandler = (PacketHandler *) arg;
   while(true) {
@@ -119,6 +126,10 @@ void setup(void)
   #ifdef TFT_ILI9341
   Display *tft = new ILI9341(TFT_CS, TFT_DC, TFT_RST, TFT_BL, TFT_WIDTH, TFT_HEIGHT);
   #endif
+#ifdef CYD_TAPE_BUFFER_SIZE
+  // Reserve after TFT DMA buffer (32 KB) — early reservation steals DMA-capable RAM.
+  GameLoader::reserveTapeBuffer(CYD_TAPE_BUFFER_SIZE);
+#endif
   HDMIDisplay *hdmiDisplay = nullptr; // new HDMIDisplay(GPIO_NUM_7);
   // navigation stack
   NavigationStack *navigationStack = new NavigationStack(tft, hdmiDisplay);
@@ -190,7 +201,6 @@ void setup(void)
   CydCalibration::runIfNeeded(*tft, *settings);
 #endif
   EmulatorScreen *emulatorScreen = new EmulatorScreen(*tft, hdmiDisplay, audioOutput, files);
-  navigationStack->push(emulatorScreen);
 #ifdef CYD_TOUCH_KEYBOARD
   const bool cydRightHanded = settings->isCydRightHanded();
   emulatorScreen->setCydHandedness(cydRightHanded);
@@ -200,7 +210,10 @@ void setup(void)
       [&](SpecKeys key) { navigationStack->pressKey(key); });
   navigationStack->setCydTouchKeyboard(cydTouchKeyboard);
   emulatorScreen->setCydTouchKeyboard(cydTouchKeyboard, settings);
+  navigationStack->push(emulatorScreen);
   cydTouchKeyboard->start();
+#else
+  navigationStack->push(emulatorScreen);
 #endif
   emulatorScreen->run("", models_enum::SPECMDL_48K);
   // start off the keyboard and feed keys into the active scene
@@ -238,7 +251,11 @@ void setup(void)
   xTaskCreatePinnedToCore(
     SerialInterfaceTask,
     "SerialInterface",
+#ifdef CYD_TOUCH_KEYBOARD
+    8192,
+#else
     16384,
+#endif
     packetHandler,
     1,
     nullptr,
@@ -253,6 +270,7 @@ void setup(void)
   {
     vTaskDelay(20 / portTICK_PERIOD_MS);
 #ifdef CYD_TOUCH_KEYBOARD
+    emulatorScreen->tickEmulation();
     emulatorScreen->openMenuIfRequested();
     Screen *topScreen = navigationStack->getTop();
     if (topScreen != nullptr && topScreen->usesCydTouch())

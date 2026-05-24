@@ -40,11 +40,16 @@ class EmulatorScreen : public Screen
     void loadGameFile(const char *path);
     void setDeferResume(bool defer) { m_deferResume = defer; }
 #ifdef CYD_TOUCH_KEYBOARD
+    bool usesCydTouch() const override;
+    void pollCydTouch() override;
     void setCydHandedness(bool rightHanded);
     void setCydTouchKeyboard(CydTouchKeyboard *keyboard, ISettings *settings);
+    void refreshCydKeyboard();
     void openMenuIfRequested();
+    void tickEmulation();
 #endif
   private:
+    bool m_emulatorStarted = false;
 #ifdef CYD_TOUCH_KEYBOARD
     CydTouchKeyboard *m_cydTouchKeyboard = nullptr;
     ISettings *m_cydSettings = nullptr;

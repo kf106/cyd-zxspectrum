@@ -20,6 +20,7 @@
 #include <stdio.h>
 #include <stdint.h>
 #include <stdlib.h>
+#include <string.h>
 #include "../AudioOutput/AudioOutput.h"
 #include "spectrum.h"
 #include "48k_rom.h"
@@ -58,6 +59,7 @@ ZXSpectrum::ZXSpectrum()
 {
   z80Regs = (Z80Regs *)malloc(sizeof(Z80Regs));
   if (z80Regs != nullptr) {
+    memset(z80Regs, 0, sizeof(Z80Regs));
     z80Regs->userInfo = this;
   }
 }

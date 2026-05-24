@@ -36,6 +36,15 @@ void displayTask(void *pvParameters) {
 
 void Renderer::waitForIdle()
 {
+  const uint32_t deadline = millis() + 5000;
+  while (!drawReady && (int32_t)(deadline - millis()) > 0)
+  {
+    vTaskDelay(1 / portTICK_PERIOD_MS);
+  }
+  if (!drawReady)
+  {
+    Serial.println("Warning: waitForIdle timed out waiting for display draw");
+  }
   while (m_drawing)
   {
     vTaskDelay(1 / portTICK_PERIOD_MS);
@@ -43,13 +52,24 @@ void Renderer::waitForIdle()
   m_tft.dmaWait();
   while (xSemaphoreTake(m_displaySemaphore, 0) == pdTRUE)
   {
-    drawReady = true;
+    drawReady = false;
+    const uint32_t drawDeadline = millis() + 5000;
+    while (!drawReady && (int32_t)(drawDeadline - millis()) > 0)
+    {
+      vTaskDelay(1 / portTICK_PERIOD_MS);
+    }
+    while (m_drawing)
+    {
+      vTaskDelay(1 / portTICK_PERIOD_MS);
+    }
+    m_tft.dmaWait();
   }
 }
 
 void Renderer::drawScreen()
 {
   m_drawing = true;
+  m_tft.startWrite();
   if (m_HDMIDisplay) {
     m_tft.dmaWait();
     m_HDMIDisplay->sendSpectrum(currentScreenBuffer, currentBorderColors);
@@ -58,21 +78,18 @@ void Renderer::drawScreen()
 #ifdef CYD_TOUCH_KEYBOARD
   if (m_cydTouchKeyboard != nullptr && m_cydKeyboardOverlayEnabled)
   {
-    m_tft.startWrite();
     m_cydTouchKeyboard->drawOverlayIfNeeded(m_tft);
-    m_tft.endWrite();
   }
 #endif
 #ifndef CYD_NO_EMULATOR_MENU
-  m_tft.startWrite();
   m_tft.dmaWait();
   if (isShowingMenu) {
     drawMenu();
   } else if (isShowingTimeTravel) {
     drawTimeTravel();
   }
-  m_tft.endWrite();
 #endif
+  m_tft.endWrite();
   m_drawing = false;
 }
 

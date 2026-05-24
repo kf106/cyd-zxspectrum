@@ -1,4 +1,6 @@
 #include <iostream>
+#include <Arduino.h>
+#include <esp_heap_caps.h>
 #include "../../TZX/ZXSpectrumTapeListener.h"
 #include "../../TZX/DummyListener.h"
 #include "../../TZX/tzx_cas.h"
@@ -8,7 +10,74 @@
 #include "../../AudioOutput/AudioOutput.h"
 #include "../../utils.h"
 
+static uint8_t *s_tapeBuffer = nullptr;
+static size_t s_tapeBufferSize = 0;
+
+void GameLoader::reserveTapeBuffer(size_t maxSize)
+{
+  if (s_tapeBuffer != nullptr)
+  {
+    return;
+  }
+
+  size_t largest = heap_caps_get_largest_free_block(MALLOC_CAP_8BIT);
+  size_t size = maxSize;
+  if (size > largest)
+  {
+    size = largest & ~0x3FF;
+  }
+
+#ifndef CYD_TAPE_BUFFER_MIN
+#define CYD_TAPE_BUFFER_MIN 49152
+#endif
+  if (size < CYD_TAPE_BUFFER_MIN)
+  {
+    Serial.printf("Failed to reserve tape buffer (largest %u, free %u, need %u)\n",
+                  (unsigned)largest, ESP.getFreeHeap(), (unsigned)CYD_TAPE_BUFFER_MIN);
+    return;
+  }
+
+  while (size >= CYD_TAPE_BUFFER_MIN)
+  {
+    s_tapeBuffer = (uint8_t *)heap_caps_malloc(size, MALLOC_CAP_8BIT);
+    if (s_tapeBuffer != nullptr)
+    {
+      s_tapeBufferSize = size;
+      Serial.printf("Reserved tape buffer: %u bytes (largest block was %u)\n",
+                    (unsigned)size, (unsigned)largest);
+      return;
+    }
+    size -= 4096;
+  }
+
+  Serial.printf("Failed to reserve tape buffer (largest %u, free %u)\n",
+                (unsigned)largest, ESP.getFreeHeap());
+}
+
 GameLoader::GameLoader(Machine *machine, Renderer *renderer, AudioOutput *audioOutput) : machine(machine), renderer(renderer), audioOutput(audioOutput) {}
+
+static uint8_t *allocateTapeBuffer(long file_size, bool &ownsBuffer)
+{
+  ownsBuffer = false;
+  if (file_size <= 0)
+  {
+    return nullptr;
+  }
+  if (s_tapeBuffer != nullptr && (size_t)file_size <= s_tapeBufferSize)
+  {
+    return s_tapeBuffer;
+  }
+  uint8_t *buffer = (uint8_t *)heap_caps_malloc(file_size, MALLOC_CAP_8BIT);
+  if (!buffer)
+  {
+    buffer = (uint8_t *)malloc(file_size);
+  }
+  if (buffer)
+  {
+    ownsBuffer = true;
+  }
+  return buffer;
+}
 
 void GameLoader::loadTape(std::string filename)
 {
@@ -35,14 +104,39 @@ void GameLoader::loadTape(std::string filename)
   fseek(fp, 0, SEEK_END);
   long file_size = ftell(fp);
   fseek(fp, 0, SEEK_SET);
-  Serial.printf("File size %d\n", file_size);
-  uint8_t *tzx_data = (uint8_t *)ps_malloc(file_size);
-  if (!tzx_data)
+  Serial.printf("File size %ld\n", file_size);
+  if (s_tapeBuffer == nullptr)
   {
-    Serial.println("Error: Could not allocate memory.");
+    Serial.println("Error: Tape buffer was not reserved at boot.");
+    fclose(fp);
     return;
   }
-  fread(tzx_data, 1, file_size, fp);
+  if (file_size > (long)s_tapeBufferSize)
+  {
+    Serial.printf("Error: Tape file too large (%ld bytes, max %u).\n", file_size, (unsigned)s_tapeBufferSize);
+    fclose(fp);
+    return;
+  }
+  bool ownsTapeBuffer = false;
+  uint8_t *tzx_data = allocateTapeBuffer(file_size, ownsTapeBuffer);
+  if (!tzx_data)
+  {
+    Serial.printf("Error: Could not allocate memory for tape (%ld bytes, free heap %u, largest block %u).\n",
+                  file_size, ESP.getFreeHeap(),
+                  heap_caps_get_largest_free_block(MALLOC_CAP_8BIT));
+    fclose(fp);
+    return;
+  }
+  if (fread(tzx_data, 1, file_size, fp) != (size_t)file_size)
+  {
+    Serial.println("Error: Failed to read tape file.");
+    if (ownsTapeBuffer)
+    {
+      free(tzx_data);
+    }
+    fclose(fp);
+    return;
+  }
   fclose(fp);
   // load the tape
   TzxCas tzxCas;
@@ -72,7 +166,7 @@ void GameLoader::loadTape(std::string filename)
         count++;
         if (borderPos == 312) {
           borderPos = 0;
-          renderer->triggerDraw(machine->getMachine()->mem.currentScreen->data, currentBorderColors);
+          renderer->forceRedraw(machine->getMachine()->mem.currentScreen->data, currentBorderColors);
         }
         if (count % 4000 == 0) {
           float machineTime = (float) listener->getTotalTicks() / 3500000.0f;
@@ -82,8 +176,8 @@ void GameLoader::loadTape(std::string filename)
           Serial.printf("Wall Clock time: %fs\n", wallTime);
           Serial.printf("Speed Up: %f\n",  machineTime/wallTime);
           Serial.printf("Progress: %lld\n", progress * 100 / totalTicks);
-          // draw a progreess bar
           renderer->setLoadProgress(progress * 100 / totalTicks);
+          renderer->forceRedraw(machine->getMachine()->mem.currentScreen->data, currentBorderColors);
           vTaskDelay(1);
         } });
   listener->start();
@@ -103,6 +197,9 @@ void GameLoader::loadTape(std::string filename)
   Serial.printf("Total execution time: %lld\n", listener->getTotalExecutionTime());
   Serial.printf("Total cycles: %lld\n", listener->getTotalTicks());
   Serial.printf("*********************");
-  free(tzx_data);
+  if (ownsTapeBuffer)
+  {
+    free(tzx_data);
+  }
   delete listener;
 }

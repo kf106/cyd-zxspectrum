@@ -45,6 +45,7 @@ public:
   void start();
   void setRightHanded(bool rightHanded);
   void setEnabled(bool enabled);
+  void pollTouchInput();
   void invalidateOverlay();
   void drawOverlayIfNeeded(Display &tft);
   static void fillRectAvoidingKeys(Display &tft, int16_t x, int16_t y, int16_t w, int16_t h, uint16_t color);
@@ -69,6 +70,7 @@ private:
   volatile bool m_modifierVisualDirty = false;
   volatile bool m_bottomRowVisualDirty = false;
   volatile bool m_rowSelectVisualDirty = false;
+  volatile int m_touchMissReads = 0;
 
   static void keyboardTask(void *arg);
   void drawKey(Display &tft, size_t index) const;
