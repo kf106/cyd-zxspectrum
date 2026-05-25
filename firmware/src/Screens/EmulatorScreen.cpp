@@ -249,8 +249,6 @@ void EmulatorScreen::loadGameFile(const char *path)
   {
     return;
   }
-  pause();
-  renderer->waitForIdle();
 
   std::string ext = path;
   size_t dot = ext.find_last_of('.');
@@ -262,11 +260,20 @@ void EmulatorScreen::loadGameFile(const char *path)
   }
   if (ext == ".tap" || ext == ".tzx")
   {
+    isLoading = true;
+    m_tft.startWrite();
+    m_tft.fillScreen(TFT_BLACK);
+    m_tft.endWrite();
+    pause();
+    renderer->waitForIdle();
     machine->startLoading();
     loadTape(path);
     finishGameLoad();
     return;
   }
+
+  pause();
+  renderer->waitForIdle();
   {
     auto bl = BusyLight();
     Load(machine->getMachine(), path);
