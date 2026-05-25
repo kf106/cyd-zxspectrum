@@ -1,9 +1,9 @@
 #include "CydTouchKeyboard.h"
+#include "CydKeyboardImages.h"
 #include "CydTouchDriver.h"
 #include "../CydLayout.h"
 #include "../TFT/Display.h"
 #include "cyd_touch/plate_touch.h"
-#include "../Screens/fonts/GillSans_15_vlw.h"
 
 static const int CYD_SCREEN_W = 320;
 static bool s_rightHanded = false;
@@ -84,6 +84,29 @@ static const CydKeyRowDef kKeyRows[CydTouchKeyboard::ROW_COUNT] = {
       {"Spc", SPECKEY_SPACE}}},
 };
 
+// R3 (row index 2) for left-handed: Enter on the left, letters shifted one slot right.
+static const CydKeyRowDef kKeyRow3Left = {{{"Ent", SPECKEY_ENTER},
+                                            {"A", SPECKEY_A},
+                                            {"S", SPECKEY_S},
+                                            {"D", SPECKEY_D},
+                                            {"F", SPECKEY_F},
+                                            {"G", SPECKEY_G},
+                                            {"H", SPECKEY_H},
+                                            {"J", SPECKEY_J},
+                                            {"K", SPECKEY_K},
+                                            {"L", SPECKEY_L}}};
+
+static constexpr int8_t CYD_ROW_R3 = 2;
+
+static const CydKeyRowDef &bottomRowDef(int8_t row, bool rightHanded)
+{
+  if (row == CYD_ROW_R3 && !rightHanded)
+  {
+    return kKeyRow3Left;
+  }
+  return kKeyRows[row];
+}
+
 static int16_t modifierColumnX(bool rightHanded)
 {
   return rightHanded ? (int16_t)CYD_MODIFIER_COLUMN_X_RIGHT : (int16_t)CYD_MODIFIER_COLUMN_X_LEFT;
@@ -161,6 +184,7 @@ void CydTouchKeyboard::setRightHanded(bool rightHanded)
   m_modifierVisualDirty = true;
   m_bottomRowVisualDirty = true;
   m_rowSelectVisualDirty = true;
+  selectRow(m_rowSelectLatched);
 }
 
 void CydTouchKeyboard::setEnabled(bool enabled)
@@ -214,7 +238,7 @@ void CydTouchKeyboard::selectRow(int8_t row)
     return;
   }
   m_rowSelectLatched = row;
-  const CydKeyRowDef &rowDef = kKeyRows[row];
+  const CydKeyRowDef &rowDef = bottomRowDef(row, s_rightHanded);
   for (int i = 0; i < BOTTOM_KEY_COUNT; i++)
   {
     const CydBottomKeySlot &slot = rowDef.keys[i];
@@ -402,10 +426,24 @@ void CydTouchKeyboard::drawKey(Display &tft, size_t index) const
   bool latched = (k.key == SPECKEY_SHIFT && m_capShiftLatched) ||
                  (k.key == SPECKEY_SYMB && m_symShiftLatched) ||
                  (k.rowSelectIndex >= 0 && k.rowSelectIndex == m_rowSelectLatched);
+
+  CydKeyImage img;
+  if (cydKeyboardImageForLabel(k.label, index, img))
+  {
+    tft.fillRect(k.x, k.y, k.w, k.h, TFT_BLACK);
+    cydKeyboardDrawImage(tft, k.x, k.y, img);
+    if (pressed || latched)
+    {
+      uint16_t border = pressed ? TFT_WHITE : 0xC618;
+      tft.drawRect(k.x, k.y, k.w, k.h, border);
+    }
+    return;
+  }
+
   uint16_t fill = pressed ? 0x52AA : (latched ? 0x4A69 : 0x3186);
   tft.fillRect(k.x, k.y, k.w, k.h, fill);
-  tft.drawRect(k.x, k.y, k.w, k.h, 0xFFFF);
-  tft.setTextColor(0xFFFF, fill);
+  tft.drawRect(k.x, k.y, k.w, k.h, TFT_WHITE);
+  tft.setTextColor(TFT_WHITE, fill);
   Point size = tft.measureString(k.label);
   int tx = k.x + (k.w - size.x) / 2;
   int ty = k.y + (k.h - size.y) / 2;
@@ -414,12 +452,6 @@ void CydTouchKeyboard::drawKey(Display &tft, size_t index) const
 
 void CydTouchKeyboard::drawAllKeys(Display &tft)
 {
-  static bool fontLoaded = false;
-  if (!fontLoaded)
-  {
-    tft.loadFont(GillSans_15_vlw);
-    fontLoaded = true;
-  }
   for (size_t i = 0; i < m_keyCount; i++)
   {
     drawKey(tft, i);
