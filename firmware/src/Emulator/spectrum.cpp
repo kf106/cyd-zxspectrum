@@ -70,6 +70,50 @@ void ZXSpectrum::reset()
   Z80FlagTables();
 }
 
+void ZXSpectrum::resetBorderTimeline()
+{
+  m_borderTstatesInLine = 0;
+  m_borderLineIndex = 0;
+}
+
+static void captureBorderLineForIndex(ZXSpectrum *speccy, int lineIndex)
+{
+  uint8_t *attrBase = speccy->mem.currentScreen->data + 0x1800;
+  if (lineIndex < 64 || lineIndex >= 256)
+  {
+    speccy->hwopt.portFF = 0xFF;
+  }
+  else
+  {
+    speccy->hwopt.portFF = *(attrBase + 32 * (lineIndex - 64) / 8);
+  }
+  speccy->borderColors[lineIndex] = speccy->hwopt.BorderColor & 0x07u;
+}
+
+int ZXSpectrum::runForCyclesWithBorder(int cycles)
+{
+  int executed = 0;
+  while (cycles > 0)
+  {
+    const int toLineEnd = 224 - (int)m_borderTstatesInLine;
+    const int chunk = cycles < toLineEnd ? cycles : toLineEnd;
+    executed += Z80Run(z80Regs, chunk);
+    cycles -= chunk;
+    m_borderTstatesInLine = (uint16_t)(m_borderTstatesInLine + (uint16_t)chunk);
+    if (m_borderTstatesInLine >= 224)
+    {
+      captureBorderLineForIndex(this, (int)m_borderLineIndex);
+      m_borderLineIndex++;
+      if (m_borderLineIndex >= 312)
+      {
+        m_borderLineIndex = 0;
+      }
+      m_borderTstatesInLine = 0;
+    }
+  }
+  return executed;
+}
+
 int ZXSpectrum::runForFrame(AudioOutput *audioOutput, FILE *audioFile)
 {
   uint8_t audioBuffer[312];

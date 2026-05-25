@@ -1,6 +1,5 @@
 #include <iostream>
 #include <Arduino.h>
-#include <cstring>
 #include <esp_heap_caps.h>
 #include "../../TZX/ZXSpectrumTapeListener.h"
 #include "../../TZX/DummyListener.h"
@@ -13,17 +12,6 @@
 
 static uint8_t *s_tapeBuffer = nullptr;
 static size_t s_tapeBufferSize = 0;
-
-/** Tape load runs runForCycles(), not runForFrame(), so borderColors[] is never filled per line. */
-static void syncTapeLoadBorderColors(ZXSpectrum *speccy)
-{
-  if (speccy == nullptr)
-  {
-    return;
-  }
-  const uint8_t bc = speccy->hwopt.BorderColor & 0x07u;
-  memset(speccy->borderColors, bc, sizeof(speccy->borderColors));
-}
 
 void GameLoader::reserveTapeBuffer(size_t maxSize)
 {
@@ -169,7 +157,6 @@ void GameLoader::loadTape(std::string filename)
   renderer->setLoadProgress(10);
   {
     ZXSpectrum *speccy = machine->getMachine();
-    syncTapeLoadBorderColors(speccy);
     renderer->forceRedraw(speccy->mem.currentScreen->data, speccy->borderColors);
   }
   int count = 0;
@@ -187,7 +174,6 @@ void GameLoader::loadTape(std::string filename)
           Serial.printf("Progress: %lld\n", progress * 100 / totalTicks);
           renderer->setLoadProgress(pct);
           ZXSpectrum *speccy = machine->getMachine();
-          syncTapeLoadBorderColors(speccy);
           renderer->forceRedraw(speccy->mem.currentScreen->data, speccy->borderColors);
           vTaskDelay(1);
         } });

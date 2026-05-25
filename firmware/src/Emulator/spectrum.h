@@ -208,14 +208,20 @@ public:
   uint8_t borderColors[312] = {0};
   // indicates that the ROM loading routine is active
   bool romLoadingRoutineHit = false;
+  /** Tape load: sample borderColors[] like runForFrame (224 tstates per line). */
+  uint16_t m_borderTstatesInLine = 0;
+  uint16_t m_borderLineIndex = 0;
 
   ZXSpectrum();
   void reset();
+  void resetBorderTimeline();
   int runForFrame(AudioOutput *audioOutput, FILE *audioFile);
   inline int runForCycles(int cycles)
   {
     return Z80Run(z80Regs, cycles);
   }
+  /** Same as runForCycles but fills borderColors[] for stripy LOAD borders. */
+  int runForCyclesWithBorder(int cycles);
 
   void interrupt();
   void updateKey(SpecKeys key, uint8_t state);

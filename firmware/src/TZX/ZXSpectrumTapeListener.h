@@ -11,7 +11,7 @@ class ZXSpectrumTapeListener:public TapeListener {
     this->spectrum = spectrum;
   }
   virtual void start() {
-    // nothing to do - maybe we could start the spectrum tape loader?
+    this->spectrum->resetBorderTimeline();
   }
   inline virtual void toggleMicLevel() {
     if (this->spectrum->micLevel) {
@@ -39,14 +39,14 @@ class ZXSpectrumTapeListener:public TapeListener {
   inline virtual void runForTicks(uint64_t ticks) {
     addTicks(ticks);
     uint64_t startUs = get_usecs();
-    this->spectrum->runForCycles(ticks);
+    this->spectrum->runForCyclesWithBorder(ticks);
     uint64_t endUs = get_usecs();
     totalExecutionTime += endUs - startUs;
   }
   inline virtual void pause1Millis() {
     addTicks(MILLI_SECOND);
     uint64_t startUs = get_usecs();
-    this->spectrum->runForCycles(MILLI_SECOND);
+    this->spectrum->runForCyclesWithBorder(MILLI_SECOND);
     uint64_t endUs = get_usecs();
     totalExecutionTime += endUs - startUs;
   }
