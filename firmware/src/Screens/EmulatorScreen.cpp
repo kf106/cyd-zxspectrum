@@ -266,6 +266,17 @@ void EmulatorScreen::loadGameFile(const char *path)
     m_tft.endWrite();
     pause();
     renderer->waitForIdle();
+    ZXSpectrum *speccy = machine->getMachine();
+    if (speccy != nullptr)
+    {
+      // LOAD "" needs copyright/BASIC with an empty line — reset if a game was running.
+      speccy->reset_spectrum(speccy->z80Regs);
+      speccy->resetBorderTimeline();
+      for (int i = 0; i < 8; i++)
+      {
+        speckey[i] = 0xFF;
+      }
+    }
     machine->startLoading();
     loadTape(path);
     finishGameLoad();
