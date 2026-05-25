@@ -1,4 +1,5 @@
 #include "CydMenuScreen.h"
+#include <esp_system.h>
 #include "AlphabetPicker.h"
 #include "CydCalibration.h"
 #include "EmulatorScreen.h"
@@ -194,6 +195,7 @@ void CydMenuScreen::buildMainRows()
   m_rows[m_rowCount++] = {"Load snapshot", sdReady, Action::LoadSnapshot};
   m_rows[m_rowCount++] = {"Load game / tape", sdReady, Action::LoadGame};
   m_rows[m_rowCount++] = {"Poke", true, Action::Poke};
+  m_rows[m_rowCount++] = {"Reboot", true, Action::Reboot};
   m_rows[m_rowCount++] = {"Exit to emulator", true, Action::Exit};
 }
 
@@ -451,6 +453,10 @@ void CydMenuScreen::runAction(Action action)
       m_navigationStack->push(
           new PokeScreen(m_tft, m_hdmiDisplay, m_audioOutput, m_machine->getMachine()));
     }
+    break;
+  case Action::Reboot:
+    playKeyClick();
+    esp_restart();
     break;
   case Action::Exit:
     exitMenu();

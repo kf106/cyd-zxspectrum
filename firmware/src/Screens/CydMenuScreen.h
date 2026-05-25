@@ -36,6 +36,7 @@ private:
     LoadSnapshot,
     LoadGame,
     Poke,
+    Reboot,
     Exit,
     VolumeDown,
     VolumeUp,
