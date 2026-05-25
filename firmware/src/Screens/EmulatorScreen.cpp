@@ -459,6 +459,7 @@ void EmulatorScreen::loadTape(std::string filename)
 #endif
   renderer->resume();
   renderer->setIsLoading(true);
+  renderer->invalidateFramebufferCache();
   renderer->setNeedsRedraw();
   gameLoader->loadTape(filename);
 }

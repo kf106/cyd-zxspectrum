@@ -154,11 +154,17 @@ void GameLoader::loadTape(std::string filename)
   uint64_t totalTicks = dummyListener->getTotalTicks();
   Serial.printf("Total cycles: %lld\n", dummyListener->getTotalTicks());
   delete dummyListener;
+  renderer->setLoadProgress(10);
+  {
+    ZXSpectrum *speccy = machine->getMachine();
+    renderer->forceRedraw(speccy->mem.currentScreen->data, speccy->borderColors);
+  }
   int count = 0;
   ZXSpectrumTapeListener *listener = new ZXSpectrumTapeListener(machine->getMachine(), [&](uint64_t progress)
                                                                 {
         count++;
-        if (count % 4000 == 0) {
+        if (count % 2000 == 0) {
+          const uint16_t pct = (uint16_t)(10 + (progress * 90 / totalTicks));
           float machineTime = (float) listener->getTotalTicks() / 3500000.0f;
           float wallTime = (float) (get_usecs() - startTime) / 1000000.0f;
           Serial.printf("Total execution time: %fs\n", (float) listener->getTotalExecutionTime() / 1000000.0f);
@@ -166,9 +172,9 @@ void GameLoader::loadTape(std::string filename)
           Serial.printf("Wall Clock time: %fs\n", wallTime);
           Serial.printf("Speed Up: %f\n",  machineTime/wallTime);
           Serial.printf("Progress: %lld\n", progress * 100 / totalTicks);
-          renderer->setLoadProgress(progress * 100 / totalTicks);
-          renderer->forceRedraw(machine->getMachine()->mem.currentScreen->data,
-                                machine->getMachine()->borderColors);
+          renderer->setLoadProgress(pct);
+          ZXSpectrum *speccy = machine->getMachine();
+          renderer->forceRedraw(speccy->mem.currentScreen->data, speccy->borderColors);
           vTaskDelay(1);
         } });
   listener->start();

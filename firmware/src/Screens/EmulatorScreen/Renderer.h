@@ -66,6 +66,7 @@ private:
     // are we loading? - this is used for tzx files
     bool isLoading = false;
     uint16_t loadProgress = 0;
+    int16_t m_loadBarFilledPx = -1;
     // should we be rendering
     bool isRunning = false;
     volatile bool m_drawing = false;
@@ -118,7 +119,14 @@ public:
     }
     void setIsLoading(bool loading) {
       isLoading = loading;
+      if (loading)
+      {
+        resetLoadProgressBar();
+      }
     }
+    void resetLoadProgressBar();
+    void extendLoadProgressBar();
+    void extendLoadProgressBarPixels();
     void pause() {
       isRunning = false;
     }

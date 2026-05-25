@@ -175,15 +175,45 @@ void Renderer::drawCydBorders()
 }
 #endif
 
+void Renderer::resetLoadProgressBar()
+{
+  m_loadBarFilledPx = -1;
+}
+
+void Renderer::extendLoadProgressBarPixels()
+{
+#if defined(CYD_EMULATOR_W) && defined(CYD_TOUCH_KEYBOARD)
+  if (!isLoading)
+  {
+    return;
+  }
+  const int filled = (int)loadProgress * CYD_DISPLAY_W / 100;
+  if (filled <= m_loadBarFilledPx)
+  {
+    return;
+  }
+  if (m_loadBarFilledPx < 0)
+  {
+    m_tft.fillRect(0, CYD_KEYBOARD_ROW_Y, CYD_DISPLAY_W, CYD_KEYBOARD_ROW_H, TFT_BLACK);
+    m_loadBarFilledPx = 0;
+  }
+  if (filled > m_loadBarFilledPx)
+  {
+    m_tft.fillRect(m_loadBarFilledPx, CYD_KEYBOARD_ROW_Y, filled - m_loadBarFilledPx, CYD_KEYBOARD_ROW_H, TFT_GREEN);
+    m_loadBarFilledPx = filled;
+  }
+#endif
+}
+
+void Renderer::extendLoadProgressBar()
+{
+  m_tft.startWrite();
+  extendLoadProgressBarPixels();
+  m_tft.endWrite();
+}
+
 void Renderer::drawSpectrumScreen() {
 #if defined(CYD_EMULATOR_W) && defined(CYD_TOUCH_KEYBOARD)
-  if (isLoading)
-  {
-    int position = loadProgress * 256 / 100;
-    const int commandRowY = spectrumOriginY + CYD_SPECTRUM_H;
-    m_tft.fillRect(spectrumOriginX + position, commandRowY, 256 - position, CYD_COMMAND_ROW_H, TFT_BLACK);
-    m_tft.fillRect(spectrumOriginX, commandRowY, position, CYD_COMMAND_ROW_H, TFT_GREEN);
-  }
   drawCydBorders();
 #else
   if (isLoading)
@@ -303,6 +333,12 @@ void Renderer::drawSpectrumScreen() {
       m_tft.pushPixels(pixelBuffer, 256 * 8);
     }
   }
+#if defined(CYD_EMULATOR_W) && defined(CYD_TOUCH_KEYBOARD)
+  if (isLoading)
+  {
+    extendLoadProgressBarPixels();
+  }
+#endif
   drawReady = true;
   firstDraw = false;
   frameCount++;
