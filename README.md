@@ -94,7 +94,7 @@ You can also open the `firmware` folder in [VS Code](https://code.visualstudio.c
 
 On first boot the firmware:
 
-1. Runs **four-corner touch calibration** (same approach as [cyd-lords-of-midnight](https://github.com/atomic14/cyd-lords-of-midnight))
+1. Runs **four-corner touch calibration**
 2. Asks for **left- or right-handed** keyboard layout
 
 Calibration and settings are written to LittleFS and **are not erased** when you upload new firmware.
