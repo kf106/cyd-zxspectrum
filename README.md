@@ -15,6 +15,29 @@ This project is a CYD-focused port of [atomic14's ESP32 ZX Spectrum emulator](ht
 - **SD card** support for `.z80`, `.sna`, `.tap`, and `.tzx` files
 - Settings and touch calibration stored in LittleFS (`settings.json`), preserved across firmware uploads
 
+## The Innovation
+
+The innovation is the **touch-screen keyboard** that stays permanently available under the Spectrum display, with **R1–R4** buttons that switch between rows of the original Spectrum keyboard. It’s surprisingly usable, about as good as the original rubber keyboard, and it has the same spirit to it.
+
+Left-handed and right-handed layouts:
+
+![Touch keyboard (left-handed)](assets/spec-001.jpg)
+![Touch keyboard (right-handed)](assets/spec-002.jpg)
+
+Loading a game from tape file (`.tap` / `.tzx`):
+
+![The Lords of Midnight loading](assets/spec-003.jpg)
+
+Once loaded, you can navigate through the game as easily as with a real Spectrum:
+
+![The Lords of Midnight gameplay 1](assets/spec-004.jpg)
+![The Lords of Midnight gameplay 2](assets/spec-005.jpg)
+![The Lords of Midnight gameplay 3](assets/spec-006.jpg)
+
+Screenshots demonstrate the emulator using the best game ever written for the ZX Spectrum, namely *The Lords of Midnight* © 1984 Beyond Software / Mike Singleton.
+
+I also plan a feature inspired by the old cardboard keyboard overlays: if there’s a matching <file>.KEY alongside a tape image (for example game.tzx + game.key), the on‑screen keyboard will temporarily relabel the keys with game-specific actions to act as a live overlay/cheat sheet.
+
 ## Hardware
 
 Target board: **ESP32-2432S028** (320×240 ILI9341 TFT, XPT2046 touch, microSD on SPI).
