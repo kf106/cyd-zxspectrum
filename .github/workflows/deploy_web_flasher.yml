@@ -1,0 +1,81 @@
+name: Deploy web flasher (GitHub Pages)
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Version from tag or build
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "release" ]; then
+            RAW="${{ github.event.release.tag_name }}"
+          else
+            RAW=$(git describe --tags --abbrev=0 2>/dev/null || echo "0.0.0-dev")
+          fi
+          VERSION=$(echo "$RAW" | sed -E 's/^v?([0-9]+\.[0-9]+\.[0-9]+).*/\1/')
+          if [ "$VERSION" = "$RAW" ] && [ "${{ github.event_name }}" != "release" ]; then
+            VERSION="${RAW}"
+          fi
+          echo "VERSION=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/pip
+            ~/.platformio/.cache
+          key: ${{ runner.os }}-pio-cyd
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install PlatformIO
+        run: pip install --upgrade platformio
+
+      - name: Build CYD firmware
+        run: pio run -e cheap-yellow-display --project-dir firmware
+
+      - name: Assemble flasher site
+        run: |
+          SITE=flasher-site
+          rm -rf "$SITE"
+          mkdir -p "$SITE"
+          cp docs/flasher/index.html "$SITE/"
+          BUILD=firmware/.pio/build/cheap-yellow-display
+          cp "$BUILD/bootloader.bin" "$BUILD/partitions.bin" "$BUILD/firmware.bin" "$SITE/"
+          BOOT_APP0=$(find ~/.platformio/packages/framework-arduinoespressif32 -path '*/boot_app0.bin' | head -1)
+          if [ -z "$BOOT_APP0" ]; then
+            echo "boot_app0.bin not found in PlatformIO packages" >&2
+            exit 1
+          fi
+          cp "$BOOT_APP0" "$SITE/boot_app0.bin"
+          sed "s/VERSION_PLACEHOLDER/${{ steps.version.outputs.VERSION }}/" \
+            docs/flasher/manifest.template.json > "$SITE/manifest.json"
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: flasher-site
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

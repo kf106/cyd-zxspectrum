@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Flash CYD ZX Spectrum firmware</title>
+  <style>
+    :root {
+      --esp-tools-button-color: #1e5aa8;
+      --esp-tools-button-text-color: #ffffff;
+      --esp-tools-button-border-radius: 8px;
+    }
+    body {
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      max-width: 42rem;
+      margin: 2rem auto;
+      padding: 0 1rem;
+      line-height: 1.5;
+      color: #111;
+    }
+    h1 { font-size: 1.5rem; }
+    ul { padding-left: 1.25rem; }
+    .note {
+      background: #f4f4f4;
+      border-left: 4px solid #1e5aa8;
+      padding: 0.75rem 1rem;
+      margin: 1.25rem 0;
+    }
+  </style>
+  <script
+    type="module"
+    src="https://unpkg.com/esp-web-tools@10/dist/web/install-button.js?module"
+  ></script>
+</head>
+<body>
+  <h1>Cheap Yellow Display — ZX Spectrum firmware</h1>
+  <p>
+    Install the latest firmware in your browser. You need a
+    <strong>USB data cable</strong>, <strong>Google Chrome</strong> or
+    <strong>Microsoft Edge</strong> on a computer (not phone or tablet), and an
+    ESP32-2432S028 (CYD) board.
+  </p>
+  <ol>
+    <li>Plug the CYD into your computer with USB.</li>
+    <li>Click <strong>Install firmware</strong> below and allow access to the serial port when asked.</li>
+    <li>Pick the CYD’s USB serial port (often <code>USB Serial</code> or <code>CP210x</code>).</li>
+    <li>Wait until flashing finishes. On first boot you will get touch calibration and left/right-handed choice.</li>
+  </ol>
+  <esp-web-install-button manifest="manifest.json">
+    <button slot="activate" style="font-size: 1rem; padding: 0.6rem 1.2rem; cursor: pointer;">
+      Install firmware
+    </button>
+    <span slot="unsupported">
+      This installer needs Chrome or Edge on a desktop/laptop (Web Serial is not available here).
+    </span>
+    <span slot="not-allowed">
+      Open this page over HTTPS (for example via GitHub Pages), not as a local file.
+    </span>
+  </esp-web-install-button>
+  <div class="note">
+    <strong>Note:</strong> Installing firmware does not copy games onto the SD card. Use a FAT32 card and copy
+    <code>.tap</code>, <code>.tzx</code>, <code>.z80</code>, or <code>.sna</code> files separately, or use
+    <strong>Menu → Load game / tape</strong> after flashing.
+  </div>
+  <p>
+    <a href="https://github.com/kf106/cyd-zxspectrum">Source and build instructions</a>
+  </p>
+</body>
+</html>
