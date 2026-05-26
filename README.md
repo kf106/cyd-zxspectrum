@@ -24,7 +24,7 @@ Left-handed and right-handed layouts:
 ![Touch keyboard (left-handed)](assets/spec-001.jpg)
 ![Touch keyboard (right-handed)](assets/spec-002.jpg)
 
-Loading a game from tape file (`.tap` / `.tzx`):
+Loading a game from tape (`.tap` / `.tzx`) includes a progress bar. It runs at about **3× real speed** — nostalgic, but not *that* nostalgic.
 
 ![The Lords of Midnight loading](assets/spec-003.jpg)
 
