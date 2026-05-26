@@ -51,6 +51,26 @@ Target board: **ESP32-2432S028** (320×240 ILI9341 TFT, XPT2046 touch, microSD o
 
 Other ESP32 boards from the upstream project may still build from `firmware/platformio.ini`, but **only `cheap-yellow-display` is the focus here**.
 
+## Install firmware in your browser (no build tools)
+
+If you only want to flash a CYD and do not want to install PlatformIO, use the **web installer** (Chrome or Edge on a computer):
+
+**[Install CYD ZX Spectrum firmware](https://kf106.github.io/cyd-zxspectrum/)**
+
+1. Connect the CYD to your computer with a **USB data cable** (not charge-only).
+2. Open the link above in **Google Chrome** or **Microsoft Edge** (Web Serial is not available on phones, tablets, or Safari).
+3. Click **Install firmware** and allow access to the USB serial port when prompted.
+4. Select the CYD’s port and wait for the progress bar to finish (a few minutes).
+5. On **first boot**, complete **touch calibration** and choose **left- or right-handed** keyboard layout.
+
+The installer appears after a [GitHub Release](https://github.com/kf106/cyd-zxspectrum/releases) is published (the site is updated automatically). If the button is missing or fails, use the [build from source](#building-and-flashing-ubuntu) steps below.
+
+**What this does and does not do**
+
+- **Does:** installs the emulator firmware on the ESP32 flash.
+- **Does not:** copy games onto the microSD card — format the card as **FAT32** and copy `.tap`, `.tzx`, `.z80`, or `.sna` files yourself (see [Games and storage](#games-and-storage)).
+- **Erasing:** you may be asked whether to erase flash first; choose **erase** for a clean install (you will need to calibrate touch again). Normal firmware uploads from PlatformIO do not erase calibration settings.
+
 ## Building and flashing (Ubuntu)
 
 ### Prerequisites
@@ -153,9 +173,10 @@ python serial_keyboard.py
 | Path | Purpose |
 |------|---------|
 | `firmware/` | ESP32 firmware (PlatformIO) |
+| `docs/flasher/` | Browser installer page (published to GitHub Pages on release) |
 | `keyboard-server/` | Host-side serial keyboard helper |
 | `desktop/` | Desktop builds (upstream) |
-| `docs/` | Images and notes |
+| `docs/` | Screenshots and web flasher sources |
 
 ## License
 
