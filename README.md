@@ -17,14 +17,14 @@ This project is a CYD-focused port of [atomic14's ESP32 ZX Spectrum emulator](ht
 
 ## The Innovation
 
-The innovation is the **touch-screen keyboard** that stays permanently available under the Spectrum display, with **R1–R4** buttons that switch between rows of the original Spectrum keyboard. It’s surprisingly usable, about as good as the original rubber keyboard, and it has the same spirit to it.
+The **touch-screen keyboard** stays permanently available under the Spectrum display, with **R1–R4** buttons that switch between rows of the original Spectrum keyboard. It’s surprisingly usable, about as good as the original rubber keyboard, and it has the same spirit to it.
 
 Left-handed and right-handed layouts:
 
 ![Touch keyboard (left-handed)](assets/spec-001.jpg)
 ![Touch keyboard (right-handed)](assets/spec-002.jpg)
 
-Loading a game from tape (`.tap` / `.tzx`) includes a progress bar. It runs at about **3× real speed** — nostalgic, but not *that* nostalgic.
+Loading a game from tape (`.tap` / `.tzx`) includes a progress bar. It runs at about **3× real speed** which is nostalgic, but not *that* nostalgic.
 
 ![The Lords of Midnight loading](assets/spec-003.jpg)
 
