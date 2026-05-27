@@ -55,7 +55,7 @@ Other ESP32 boards from the upstream project may still build from `firmware/plat
 
 **[Install CYD ZX Spectrum firmware](https://kf106.github.io/cyd-zxspectrum/)**
 
-Use **Chrome** or **Edge** on a computer. Plug the CYD in with USB, open the link, click **Install firmware**, pick the serial port, and wait.
+Use **Chrome** or **Edge** on a computer. Plug the CYD in with USB, open the link, click **Install firmware**, pick the serial port, and wait. On Ubuntu the port is usually **`/dev/ttyUSB0`**.
 
 On first boot: touch calibration, then left- or right-handed keyboard.
 
@@ -96,7 +96,7 @@ From the repository root:
 # Build
 .pio-venv/bin/pio run -e cheap-yellow-display --project-dir firmware
 
-# Flash (CYD connected by USB; usually /dev/ttyUSB0 or /dev/ttyACM0)
+# Flash (CYD connected by USB; on Ubuntu usually /dev/ttyUSB0, sometimes /dev/ttyACM0)
 .pio-venv/bin/pio run -e cheap-yellow-display --project-dir firmware -t upload
 
 # Serial monitor (Ctrl+C to exit)
@@ -119,7 +119,7 @@ To erase flash and settings (forces touch calibration on next boot):
 
 ### Optional: VS Code
 
-You can also open the `firmware` folder in [VS Code](https://code.visualstudio.com/) with the [PlatformIO IDE](https://platformio.org/install/ide?install=vscode) extension and use the **cheap-yellow-display** environment from the PlatformIO sidebar.
+According to Atomic14 you can also open the `firmware` folder in [VS Code](https://code.visualstudio.com/) with the [PlatformIO IDE](https://platformio.org/install/ide?install=vscode) extension and use the **cheap-yellow-display** environment from the PlatformIO sidebar, although I haven't tested this.
 
 ## First boot
 
@@ -146,7 +146,7 @@ Snapshots are saved under `/snapshots` on the SD card when present.
 
 ## Optional: USB serial keyboard
 
-The `keyboard-server/` directory has Python tooling to send keystrokes over USB serial (useful on a desk with the CYD connected). It has mainly been tested on macOS.
+The `keyboard-server/` directory has Python tooling to send keystrokes over USB serial (useful on a desk with the CYD connected). Atomic14 has tested it on macOS. I haven't tried it yet.
 
 ```sh
 cd keyboard-server
@@ -165,6 +165,9 @@ python serial_keyboard.py
 | `keyboard-server/` | Host-side serial keyboard helper |
 | `desktop/` | Desktop builds (upstream) |
 | `docs/` | Screenshots and web flasher sources |
+| `assets/` | Images for the keys and this page |
+| `utils/` | Python image converter script |
+
 
 ## License
 
