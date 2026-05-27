@@ -2,7 +2,7 @@
 
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](./LICENSE)
 
-Firmware that turns a [Cheap Yellow Display (CYD)](https://www.google.com/search?q=esp32+cheap+yellow+display) ESP32-2432S028 into a 48K ZX Spectrum with an on-screen touch keyboard.
+Firmware that turns a [Cheap Yellow Display (CYD)](https://github.com/witnessmenow/ESP32-Cheap-Yellow-Display) ESP32-2432S028 into a 48K ZX Spectrum with an on-screen touch keyboard.
 
 This project is a CYD-focused port of [atomic14's ESP32 ZX Spectrum emulator](https://github.com/atomic14/esp32-zxspectrum). The upstream tree also contains desktop and web builds; **this repository is maintained for the CYD board**.
 
