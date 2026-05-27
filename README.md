@@ -36,6 +36,10 @@ Once loaded, you can navigate through the game as easily as with a real Spectrum
 
 Screenshots demonstrate the emulator using the best game ever written for the ZX Spectrum, namely *The Lords of Midnight* © 1984 Beyond Software / Mike Singleton.
 
+*Demoing some Sinclair BASIC programming*
+
+<video controls src="assets/CYD-ZX-Spectrum-demo.mp4"></video>
+
 I also plan a feature inspired by the old cardboard keyboard overlays: if there’s a matching <file>.KEY alongside a tape image (for example game.tzx + game.key), the on‑screen keyboard will temporarily relabel the keys with game-specific actions to act as a live overlay/cheat sheet.
 
 ## Hardware
