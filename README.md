@@ -38,7 +38,7 @@ Screenshots demonstrate the emulator using the best game ever written for the ZX
 
 *Demoing some Sinclair BASIC programming*
 
-<video controls src="assets/CYD-ZX-Spectrum-demo.mp4"></video>
+[![Watch the demo on YouTube](https://img.youtube.com/vi/5wpk6Go0m5Q/hqdefault.jpg)](https://youtu.be/5wpk6Go0m5Q)
 
 I also plan a feature inspired by the old cardboard keyboard overlays: if there’s a matching <file>.KEY alongside a tape image (for example game.tzx + game.key), the on‑screen keyboard will temporarily relabel the keys with game-specific actions to act as a live overlay/cheat sheet.
 
