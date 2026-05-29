@@ -48,6 +48,9 @@ class Settings: public ISettings {
       if (!doc["cydTouchSwapXY"].is<bool>()) {
         doc["cydTouchSwapXY"] = true;
       }
+      if (!doc["cydKeyboardUseCustom"].is<bool>()) {
+        doc["cydKeyboardUseCustom"] = false;
+      }
     }
 
   public:
@@ -119,6 +122,14 @@ class Settings: public ISettings {
       doc["cydTouchRawYMax"] = cal.rawYMax;
       doc["cydTouchSwapXY"] = cal.swapXY;
       doc["cydTouchValid"] = cal.valid;
+      save();
+    }
+
+    bool isCydKeyboardUseCustom() override {
+      return doc["cydKeyboardUseCustom"].as<bool>();
+    }
+    void setCydKeyboardUseCustom(bool useCustom) override {
+      doc["cydKeyboardUseCustom"] = useCustom;
       save();
     }
 

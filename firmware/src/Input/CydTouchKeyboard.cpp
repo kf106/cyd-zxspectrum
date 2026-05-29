@@ -1,5 +1,6 @@
 #include "CydTouchKeyboard.h"
 #include "CydKeyboardImages.h"
+#include "CydKeyboardTheme.h"
 #include "CydTouchDriver.h"
 #include "../CydLayout.h"
 #include "../TFT/Display.h"
@@ -671,6 +672,7 @@ void CydTouchKeyboard::pollTouch()
   int16_t y = 0;
   if (!readTouch(x, y))
   {
+    cydKeyboardThemeClearPlayfieldLatch();
     if (m_activeKey != SPECKEY_NONE || m_activeRowSelect >= 0)
     {
       if (++m_touchMissReads >= 3)
@@ -687,12 +689,17 @@ void CydTouchKeyboard::pollTouch()
   {
     if (isInPlayfield(x, y))
     {
+      if (cydKeyboardThemeOnPlayfieldTap())
+      {
+        invalidateOverlay();
+      }
       if (m_activeKey != SPECKEY_NONE || m_activeRowSelect >= 0)
       {
         releaseActiveKey();
       }
       return;
     }
+    cydKeyboardThemeClearPlayfieldLatch();
     if (m_activeKey != SPECKEY_NONE || m_activeRowSelect >= 0)
     {
       releaseActiveKey();

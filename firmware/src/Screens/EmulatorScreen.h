@@ -34,7 +34,7 @@ class EmulatorScreen : public Screen
     void resume();
     void didAppear() override;
     void willDisappear() override;
-    void loadTape(std::string filename);
+    bool loadTape(std::string filename);
     Renderer *getRenderer() { return renderer; }
     Machine *getMachine() { return machine; }
     void loadGameFile(const char *path);

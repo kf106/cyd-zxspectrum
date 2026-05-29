@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cstddef>
+#include <cstdint>
 #include <string>
 
 class Machine;
@@ -15,5 +17,10 @@ class GameLoader
   public:
     GameLoader(Machine *machine, Renderer *renderer, AudioOutput *audioOutput);
     static void reserveTapeBuffer(size_t size);
-    void loadTape(std::string filename);
+    static bool ensureWorkspaceBuffer();
+    static uint8_t *workspaceBuffer();
+    static size_t workspaceCapacity();
+    static bool readFileIntoWorkspace(const char *path, size_t &outSize);
+    static bool probeTapeFile(const char *path, long &outFileSize);
+    bool loadTape(std::string filename);
 };

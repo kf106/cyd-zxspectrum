@@ -1,4 +1,5 @@
 #include "CydKeyboardImages.h"
+#include "CydKeyboardTheme.h"
 #include "../TFT/Display.h"
 #include "../Screens/images/keyboard/keyboard_images.h"
 #include <cstring>
@@ -147,6 +148,11 @@ bool cydKeyboardImageForLabel(const char *label, size_t keyIndex, CydKeyImage &o
   if (label == nullptr || label[0] == '\0')
   {
     return false;
+  }
+
+  if (cydKeyboardThemeLoadImage(label, keyIndex, out))
+  {
+    return true;
   }
 
   if (strcmp(label, "Ent") == 0)

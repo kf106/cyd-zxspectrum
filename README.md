@@ -142,6 +142,34 @@ To calibrate again:
 - Open the in-emulator **Menu → Recalibrate**, or
 - Set `"cydSetupComplete": false` in `settings.json` on the device
 
+## Custom keyboard images (optional)
+
+Built-in key art is compiled into the firmware from PNGs in [`assets/keyboard/`](assets/keyboard/).
+
+### Per-game keyboard (`.tap` / `.tzx` + matching `.kbd`)
+
+When you load a tape from the **SD card**, the firmware looks for a keyboard pack with the **same basename**:
+
+| Tape on SD | Keyboard pack (same folder) |
+|------------|-----------------------------|
+| `/sdcard/lom.tzx` | `/sdcard/lom.kbd` |
+| `/sdcard/games/foo.tap` | `/sdcard/games/foo.kbd` |
+
+Build the pack from a complete keyboard folder (**47** required PNGs: `0.png`–`9.png`, `a.png`–`z.png`, `enter.png`, `del.png`, `caps.png`, `sym.png`, `menu.png`, `r1.png`–`r4.png`, `space-left.png`, `space-right.png`; `blank.png` is optional). The converter exits with an error listing any missing required files.
+
+```sh
+python3 -m pip install pillow   # once
+# Game pack only — does not change built-in firmware key art:
+python3 utils/png_converter.py utils/lom-keyboard --batch \
+  --pack-only --pack /path/to/sdcard/LOM.kbd
+```
+
+Do **not** run `utils/lom-keyboard --batch` without `--pack-only` unless you intend to replace the default keys compiled into the firmware (that writes into `firmware/src/Screens/images/keyboard/`).
+
+Copy `lom.kbd` next to `lom.tzx` on the card. After the tape finishes loading, the pack is read into the same **96 KiB workspace** used for tape loading (no extra heap for the keyboard). Serial log: `Keyboard pack loaded into workspace`.
+
+**Tap the Spectrum screen** to switch between game art and built-in keys — only when a pack was loaded for the current game. Loading another tape resets to built-in first, then loads the new game’s pack if present. Pack size must fit in 96 KiB (~47 keys at 32×26, plus optional `blank`).
+
 ## Games and storage
 
 **SD card (recommended):** format as **FAT32** (not exFAT; 64 GB cards work if formatted FAT32), copy `.z80`, `.sna`, `.tap`, or `.tzx` files to the card root (or use **Menu → Load game / tape** to browse).
@@ -172,7 +200,7 @@ python serial_keyboard.py
 | `desktop/` | Desktop builds (upstream) |
 | `docs/` | Screenshots and web flasher sources |
 | `assets/` | Images for the keys and this page |
-| `utils/` | Python image converter script |
+| `utils/` | PNG → firmware C++ and SD `.kbd` converter |
 
 
 ## License

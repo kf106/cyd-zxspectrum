@@ -14,7 +14,6 @@
 #include "key_9_image.h"
 #include "a_image.h"
 #include "b_image.h"
-#include "blank_image.h"
 #include "c_image.h"
 #include "caps_image.h"
 #include "d_image.h"
@@ -50,3 +49,4 @@
 #include "x_image.h"
 #include "y_image.h"
 #include "z_image.h"
+#include "blank_image.h"

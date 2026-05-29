@@ -32,7 +32,7 @@ void GameLoader::reserveTapeBuffer(size_t maxSize)
 #endif
   if (size < CYD_TAPE_BUFFER_MIN)
   {
-    Serial.printf("Failed to reserve tape buffer (largest %u, free %u, need %u)\n",
+    Serial.printf("Failed to reserve workspace (largest %u, free %u, need %u)\n",
                   (unsigned)largest, ESP.getFreeHeap(), (unsigned)CYD_TAPE_BUFFER_MIN);
     return;
   }
@@ -43,15 +43,110 @@ void GameLoader::reserveTapeBuffer(size_t maxSize)
     if (s_tapeBuffer != nullptr)
     {
       s_tapeBufferSize = size;
-      Serial.printf("Reserved tape buffer: %u bytes (largest block was %u)\n",
+      Serial.printf("Reserved workspace buffer: %u bytes (largest block was %u)\n",
                     (unsigned)size, (unsigned)largest);
       return;
     }
     size -= 4096;
   }
 
-  Serial.printf("Failed to reserve tape buffer (largest %u, free %u)\n",
+  Serial.printf("Failed to reserve workspace buffer (largest %u, free %u)\n",
                 (unsigned)largest, ESP.getFreeHeap());
+}
+
+bool GameLoader::ensureWorkspaceBuffer()
+{
+  if (s_tapeBuffer != nullptr)
+  {
+    return true;
+  }
+#ifdef CYD_TAPE_BUFFER_SIZE
+  reserveTapeBuffer(CYD_TAPE_BUFFER_SIZE);
+#else
+  reserveTapeBuffer(98304);
+#endif
+  return s_tapeBuffer != nullptr;
+}
+
+uint8_t *GameLoader::workspaceBuffer()
+{
+  return s_tapeBuffer;
+}
+
+size_t GameLoader::workspaceCapacity()
+{
+  return s_tapeBufferSize;
+}
+
+bool GameLoader::probeTapeFile(const char *path, long &outFileSize)
+{
+  outFileSize = 0;
+  if (path == nullptr || !ensureWorkspaceBuffer())
+  {
+    return false;
+  }
+  FILE *fp = fopen(path, "rb");
+  if (fp == nullptr)
+  {
+    Serial.printf("Tape file not found: %s\n", path);
+    return false;
+  }
+  if (fseek(fp, 0, SEEK_END) != 0)
+  {
+    fclose(fp);
+    return false;
+  }
+  outFileSize = ftell(fp);
+  fclose(fp);
+  if (outFileSize <= 0)
+  {
+    Serial.printf("Tape file empty: %s\n", path);
+    return false;
+  }
+  if (outFileSize > (long)s_tapeBufferSize)
+  {
+    Serial.printf("Tape too large: %ld bytes (workspace %u)\n", outFileSize, (unsigned)s_tapeBufferSize);
+    return false;
+  }
+  return true;
+}
+
+bool GameLoader::readFileIntoWorkspace(const char *path, size_t &outSize)
+{
+  outSize = 0;
+  if (s_tapeBuffer == nullptr || path == nullptr)
+  {
+    return false;
+  }
+  FILE *fp = fopen(path, "rb");
+  if (fp == nullptr)
+  {
+    return false;
+  }
+  if (fseek(fp, 0, SEEK_END) != 0)
+  {
+    fclose(fp);
+    return false;
+  }
+  long fileSize = ftell(fp);
+  if (fileSize <= 0 || (size_t)fileSize > s_tapeBufferSize)
+  {
+    fclose(fp);
+    return false;
+  }
+  if (fseek(fp, 0, SEEK_SET) != 0)
+  {
+    fclose(fp);
+    return false;
+  }
+  if (fread(s_tapeBuffer, 1, (size_t)fileSize, fp) != (size_t)fileSize)
+  {
+    fclose(fp);
+    return false;
+  }
+  fclose(fp);
+  outSize = (size_t)fileSize;
+  return true;
 }
 
 GameLoader::GameLoader(Machine *machine, Renderer *renderer, AudioOutput *audioOutput) : machine(machine), renderer(renderer), audioOutput(audioOutput) {}
@@ -79,13 +174,17 @@ static uint8_t *allocateTapeBuffer(long file_size, bool &ownsBuffer)
   return buffer;
 }
 
-void GameLoader::loadTape(std::string filename)
+bool GameLoader::loadTape(std::string filename)
 {
+  if (!ensureWorkspaceBuffer())
+  {
+    Serial.println("Error: Workspace buffer not available for tape load.");
+    return false;
+  }
   ScopeGuard guard([&]()
                    {
     renderer->setIsLoading(false);
     if (audioOutput) audioOutput->resume(); });
-  // stop audio playback
   if (audioOutput)
   {
     audioOutput->pause();
@@ -93,13 +192,11 @@ void GameLoader::loadTape(std::string filename)
   uint64_t startTime = get_usecs();
   renderer->setIsLoading(true);
   Serial.printf("Loading tape %s\n", filename.c_str());
-  Serial.printf("Loading tape file\n");
   FILE *fp = fopen(filename.c_str(), "rb");
   if (fp == NULL)
   {
     Serial.println("Error: Could not open file.");
-    std::cout << "Error: Could not open file." << std::endl;
-    return;
+    return false;
   }
   fseek(fp, 0, SEEK_END);
   long file_size = ftell(fp);
@@ -107,15 +204,15 @@ void GameLoader::loadTape(std::string filename)
   Serial.printf("File size %ld\n", file_size);
   if (s_tapeBuffer == nullptr)
   {
-    Serial.println("Error: Tape buffer was not reserved at boot.");
+    Serial.println("Error: Workspace buffer was not reserved at boot.");
     fclose(fp);
-    return;
+    return false;
   }
   if (file_size > (long)s_tapeBufferSize)
   {
     Serial.printf("Error: Tape file too large (%ld bytes, max %u).\n", file_size, (unsigned)s_tapeBufferSize);
     fclose(fp);
-    return;
+    return false;
   }
   bool ownsTapeBuffer = false;
   uint8_t *tzx_data = allocateTapeBuffer(file_size, ownsTapeBuffer);
@@ -125,7 +222,7 @@ void GameLoader::loadTape(std::string filename)
                   file_size, ESP.getFreeHeap(),
                   heap_caps_get_largest_free_block(MALLOC_CAP_8BIT));
     fclose(fp);
-    return;
+    return false;
   }
   if (fread(tzx_data, 1, file_size, fp) != (size_t)file_size)
   {
@@ -135,10 +232,9 @@ void GameLoader::loadTape(std::string filename)
       free(tzx_data);
     }
     fclose(fp);
-    return;
+    return false;
   }
   fclose(fp);
-  // load the tape
   TzxCas tzxCas;
   DummyListener *dummyListener = new DummyListener();
   dummyListener->start();
@@ -199,4 +295,5 @@ void GameLoader::loadTape(std::string filename)
     free(tzx_data);
   }
   delete listener;
+  return true;
 }

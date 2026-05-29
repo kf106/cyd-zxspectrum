@@ -44,6 +44,7 @@
 #endif
 #ifdef CYD_TOUCH_KEYBOARD
 #include "Input/CydTouchKeyboard.h"
+#include "Input/CydKeyboardTheme.h"
 #include "Screens/CydCalibration.h"
 #endif
 #include "SerialInterface/PacketHandler.h"
@@ -56,11 +57,7 @@
 #include "SerialInterface/Messages/MakeDirectory.h"
 #include "SerialInterface/Messages/RenameFile.h"
 #ifdef CYD_TAPE_BUFFER_SIZE
-class GameLoader
-{
-public:
-  static void reserveTapeBuffer(size_t size);
-};
+#include "Screens/EmulatorScreen/GameLoader.h"
 #endif
 void SerialInterfaceTask(void *arg) {
   PacketHandler *packetHandler = (PacketHandler *) arg;
@@ -76,8 +73,16 @@ void setup(void)
   pinMode(BOARD_POWERON, OUTPUT);
   digitalWrite(BOARD_POWERON, HIGH);
   #endif
+#ifdef CYD_SERIAL_TX_BUFFER
+  Serial.setTxBufferSize(CYD_SERIAL_TX_BUFFER);
+#else
   Serial.setTxBufferSize(20000);
+#endif
+#ifdef CYD_SERIAL_RX_BUFFER
+  Serial.setRxBufferSize(CYD_SERIAL_RX_BUFFER);
+#else
   Serial.setRxBufferSize(20000);
+#endif
   Serial.begin(115200);
   #ifdef POWER_PIN
   pinMode(POWER_PIN, OUTPUT);
@@ -127,7 +132,7 @@ void setup(void)
   Display *tft = new ILI9341(TFT_CS, TFT_DC, TFT_RST, TFT_BL, TFT_WIDTH, TFT_HEIGHT);
   #endif
 #ifdef CYD_TAPE_BUFFER_SIZE
-  // Reserve after TFT DMA buffer (32 KB) — early reservation steals DMA-capable RAM.
+  // After TFT DMA buffer (32 KiB); before emulator/serial fragment the heap.
   GameLoader::reserveTapeBuffer(CYD_TAPE_BUFFER_SIZE);
 #endif
   HDMIDisplay *hdmiDisplay = nullptr; // new HDMIDisplay(GPIO_NUM_7);
@@ -199,6 +204,7 @@ void setup(void)
   }
 #ifdef CYD_TOUCH_KEYBOARD
   CydCalibration::runIfNeeded(*tft, *settings);
+  cydKeyboardThemeInit(files);
 #endif
   EmulatorScreen *emulatorScreen = new EmulatorScreen(*tft, hdmiDisplay, audioOutput, files);
 #ifdef CYD_TOUCH_KEYBOARD

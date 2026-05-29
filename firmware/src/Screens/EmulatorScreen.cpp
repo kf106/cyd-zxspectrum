@@ -20,6 +20,7 @@
 #include "EmulatorScreen/Renderer.h"
 #ifdef CYD_TOUCH_KEYBOARD
 #include "../Input/CydTouchKeyboard.h"
+#include "../Input/CydKeyboardTheme.h"
 #include "../Input/CydTouchDriver.h"
 #endif
 #include "EmulatorScreen/Machine.h"
@@ -129,6 +130,12 @@ void EmulatorScreen::run(std::string filename, models_enum model)
 #endif
   renderer->resume();
   Serial.println("First screen draw complete");
+#ifdef CYD_TOUCH_KEYBOARD
+  if (filename.empty())
+  {
+    cydKeyboardThemeResetToBuiltin();
+  }
+#endif
   if (filename.size() > 0)
   {
     // check for tap or tpz files
@@ -138,8 +145,29 @@ void EmulatorScreen::run(std::string filename, models_enum model)
                    { return std::tolower(c); });
     if (ext == "tap" || ext == "tzx")
     {
-      machine->startLoading();
-      gameLoader->loadTape(filename.c_str());
+      long tapeSize = 0;
+      if (!GameLoader::probeTapeFile(filename.c_str(), tapeSize))
+      {
+        Serial.printf("Tape not loadable: %s\n", filename.c_str());
+      }
+      else
+      {
+        machine->startLoading();
+        if (gameLoader->loadTape(filename))
+        {
+#ifdef CYD_TOUCH_KEYBOARD
+          cydKeyboardThemeTryLoadForTape(filename.c_str());
+          if (m_cydTouchKeyboard != nullptr)
+          {
+            m_cydTouchKeyboard->invalidateOverlay();
+          }
+#endif
+        }
+        else
+        {
+          machine->setup(models_enum::SPECMDL_48K);
+        }
+      }
     }
     else
     {
@@ -260,29 +288,68 @@ void EmulatorScreen::loadGameFile(const char *path)
   }
   if (ext == ".tap" || ext == ".tzx")
   {
+#ifdef CYD_TOUCH_KEYBOARD
+    cydKeyboardThemeResetToBuiltin();
+    if (m_cydTouchKeyboard != nullptr)
+    {
+      m_cydTouchKeyboard->invalidateOverlay();
+    }
+#endif
     isLoading = true;
     m_tft.startWrite();
     m_tft.fillScreen(TFT_BLACK);
     m_tft.endWrite();
     pause();
     renderer->waitForIdle();
-    ZXSpectrum *speccy = machine->getMachine();
-    if (speccy != nullptr)
+
+    long tapeSize = 0;
+    const bool tapeOk = GameLoader::probeTapeFile(path, tapeSize);
+    if (!tapeOk)
     {
-      // LOAD "" needs copyright/BASIC with an empty line — reset if a game was running.
-      speccy->reset_spectrum(speccy->z80Regs);
-      speccy->resetBorderTimeline();
-      for (int i = 0; i < 8; i++)
-      {
-        speckey[i] = 0xFF;
-      }
+      Serial.printf(
+          "Tape not loadable: %s (file %ld bytes, workspace %u bytes, heap %u)\n",
+          path, tapeSize, (unsigned)GameLoader::workspaceCapacity(), ESP.getFreeHeap());
     }
-    machine->startLoading();
-    loadTape(path);
+    else
+    {
+      ZXSpectrum *speccy = machine->getMachine();
+      if (speccy != nullptr)
+      {
+        speccy->reset_spectrum(speccy->z80Regs);
+        speccy->resetBorderTimeline();
+        for (int i = 0; i < 8; i++)
+        {
+          speckey[i] = 0xFF;
+        }
+      }
+      machine->startLoading();
+      if (!loadTape(path))
+      {
+        Serial.println("Tape load failed — restoring 48K BASIC");
+        machine->setup(models_enum::SPECMDL_48K);
+      }
+#ifdef CYD_TOUCH_KEYBOARD
+      else
+      {
+        cydKeyboardThemeTryLoadForTape(path);
+        if (m_cydTouchKeyboard != nullptr)
+        {
+          m_cydTouchKeyboard->invalidateOverlay();
+        }
+      }
+#endif
+    }
     finishGameLoad();
     return;
   }
 
+#ifdef CYD_TOUCH_KEYBOARD
+  cydKeyboardThemeResetToBuiltin();
+  if (m_cydTouchKeyboard != nullptr)
+  {
+    m_cydTouchKeyboard->invalidateOverlay();
+  }
+#endif
   pause();
   renderer->waitForIdle();
   {
@@ -458,7 +525,7 @@ void EmulatorScreen::refreshCydKeyboard()
 }
 #endif
 
-void EmulatorScreen::loadTape(std::string filename)
+bool EmulatorScreen::loadTape(std::string filename)
 {
   isLoading = true;
 #ifdef CYD_TOUCH_KEYBOARD
@@ -468,9 +535,8 @@ void EmulatorScreen::loadTape(std::string filename)
     m_navigationStack->setCydKeyboardEnabled(false);
   }
 #endif
-  renderer->resume();
   renderer->setIsLoading(true);
   renderer->invalidateFramebufferCache();
   renderer->setNeedsRedraw();
-  gameLoader->loadTape(filename);
+  return gameLoader->loadTape(filename);
 }

@@ -1,6 +1,7 @@
 #include <Arduino.h>
 #include "Serial.h"
 #include "TFTDisplay.h"
+#include <esp_heap_caps.h>
 #include <cstring>
 #include <algorithm>
 #include <vector>
@@ -26,7 +27,9 @@ public:
       buffer = heap_caps_malloc(bufferSize, MALLOC_CAP_DMA);
       if (buffer == nullptr)
       {
-        Serial.printf("Failed to allocate TFT DMA buffer (%u bytes)\n", (unsigned)bufferSize);
+        Serial.printf("Failed to allocate TFT DMA buffer (%u bytes, largest DMA %u)\n",
+                      (unsigned)bufferSize,
+                      (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_DMA));
       }
     }
   }
@@ -166,7 +169,11 @@ void TFTDisplay::sendPixels(const uint16_t *data, int numPixels)
   {
     uint32_t len = std::min(DMA_BUFFER_SIZE, bytes - i);
     dmaWait();
-    _transaction->setPixels(data + i / 2, len / 2);
+    if (!_transaction->setPixels(data + i / 2, len / 2))
+    {
+      Serial.println("TFT sendPixels failed (no DMA buffer)");
+      return;
+    }
     sendTransaction(_transaction);
   }
 }

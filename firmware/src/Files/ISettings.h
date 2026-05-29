@@ -13,4 +13,7 @@ class ISettings {
     virtual void setCydRightHanded(bool rightHanded) { (void)rightHanded; }
     virtual CydTouchCalibration getCydTouchCalibration() { return CydTouchCalibration(); }
     virtual void setCydTouchCalibration(const CydTouchCalibration &cal) { (void)cal; }
+
+    virtual bool isCydKeyboardUseCustom() { return false; }
+    virtual void setCydKeyboardUseCustom(bool useCustom) { (void)useCustom; }
 };
